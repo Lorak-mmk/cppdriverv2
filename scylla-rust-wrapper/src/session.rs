@@ -248,7 +248,7 @@ pub unsafe extern "C" fn cass_session_execute(
     session_raw: *mut CassSession,
     statement_raw: *const CassStatement,
 ) -> *const CassFuture {
-    let session_opt = ptr_to_ref(session_raw);
+    let session_opt = clone_arced(session_raw);
 
     // DO NOT refer to `statement_opt` inside the async block, as I've done just to face a segfault.
     let statement_opt = ptr_to_ref(statement_raw);

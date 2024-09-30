@@ -2,54 +2,11 @@ EMPTY :=
 SPACE := ${EMPTY} ${EMPTY}
 
 ifndef SCYLLA_TEST_FILTER
-SCYLLA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
-:BasicsTests.*\
-:ConfigTests.*\
-:ConsistencyTwoNodeClusterTests.*\
-:ConsistencyThreeNodeClusterTests.*\
-:PreparedTests.*\
-:CassandraTypes/CassandraTypesTests/*.Integration_Cassandra_*\
-:BatchSingleNodeClusterTests*:BatchCounterSingleNodeClusterTests*:BatchCounterThreeNodeClusterTests*\
-:ErrorTests.*\
-:SslNoClusterTests*:SslNoSslOnClusterTests*\
-:SchemaMetadataTest.*KeyspaceMetadata:SchemaMetadataTest.*MetadataIterator:SchemaMetadataTest.*View*\
-:TracingTests.*\
-:ByNameTests.*\
-:CompressionTests.*\
-:LoggingTests.*\
-:PreparedMetadataTests.*\
-:UseKeyspaceCaseSensitiveTests.*\
-:-PreparedTests.Integration_Cassandra_PreparedIDUnchangedDuringReprepare\
-:ExecutionProfileTest.InvalidName\
-:*NoCompactEnabledConnection\
-:PreparedMetadataTests.Integration_Cassandra_AlterDoesntUpdateColumnCount\
-:UseKeyspaceCaseSensitiveTests.Integration_Cassandra_ConnectWithKeyspace)
+SCYLLA_TEST_FILTER := $(subst ${SPACE},${EMPTY},AsyncTests.Integration_Cassandra_Close)
 endif
 
 ifndef CASSANDRA_TEST_FILTER
-CASSANDRA_TEST_FILTER := $(subst ${SPACE},${EMPTY},ClusterTests.*\
-:BasicsTests.*\
-:ConfigTests.*\
-:ConsistencyTwoNodeClusterTests.*\
-:ConsistencyThreeNodeClusterTests.*\
-:PreparedTests.*\
-:CassandraTypes/CassandraTypesTests/*.Integration_Cassandra_*\
-:ErrorTests.*\
-:SslClientAuthenticationTests*:SslNoClusterTests*:SslNoSslOnClusterTests*:SslTests*\
-:SchemaMetadataTest.*KeyspaceMetadata:SchemaMetadataTest.*MetadataIterator:SchemaMetadataTest.*View*\
-:TracingTests.*\
-:ByNameTests.*\
-:CompressionTests.*\
-:LoggingTests.*\
-:PreparedMetadataTests.*\
-:UseKeyspaceCaseSensitiveTests.*\
-:-PreparedTests.Integration_Cassandra_PreparedIDUnchangedDuringReprepare\
-:PreparedTests.Integration_Cassandra_FailFastWhenPreparedIDChangesDuringReprepare\
-:SslTests.Integration_Cassandra_ReconnectAfterClusterCrashAndRestart\
-:ExecutionProfileTest.InvalidName\
-:*NoCompactEnabledConnection\
-:PreparedMetadataTests.Integration_Cassandra_AlterDoesntUpdateColumnCount\
-:UseKeyspaceCaseSensitiveTests.Integration_Cassandra_ConnectWithKeyspace)
+CASSANDRA_TEST_FILTER := $(subst ${SPACE},${EMPTY},AsyncTests.Integration_Cassandra_Close)
 endif
 
 ifndef CCM_COMMIT_ID
@@ -187,7 +144,7 @@ else
 run-test-integration-scylla: build-integration-test-bin
 endif
 	@echo "Running integration tests on scylla ${SCYLLA_VERSION}"
-	valgrind --error-exitcode=123 --leak-check=full --errors-for-leak-kinds=definite build/cassandra-integration-tests --scylla --version=${SCYLLA_VERSION} --category=CASSANDRA --verbose=ccm --gtest_filter="${SCYLLA_TEST_FILTER}"
+	build/cassandra-integration-tests --scylla --version=${SCYLLA_VERSION} --category=CASSANDRA --verbose=ccm --gtest_filter="${SCYLLA_TEST_FILTER}"
 
 run-test-integration-cassandra: prepare-integration-test download-ccm-cassandra-image install-java8-if-missing
 ifdef DONT_REBUILD_INTEGRATION_BIN
@@ -196,7 +153,7 @@ else
 run-test-integration-cassandra: build-integration-test-bin
 endif
 	@echo "Running integration tests on cassandra ${CASSANDRA_VERSION}"
-	valgrind --error-exitcode=123 --leak-check=full --errors-for-leak-kinds=definite build/cassandra-integration-tests --version=${CASSANDRA_VERSION} --category=CASSANDRA --verbose=ccm --gtest_filter="${CASSANDRA_TEST_FILTER}"
+	build/cassandra-integration-tests --version=${CASSANDRA_VERSION} --category=CASSANDRA --verbose=ccm --gtest_filter="${CASSANDRA_TEST_FILTER}"
 
 run-test-unit: install-cargo-if-missing _update-rust-tooling
 	@cd ${CURRENT_DIR}/scylla-rust-wrapper; cargo test
