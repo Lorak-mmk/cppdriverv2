@@ -8,7 +8,7 @@ use tokio::runtime::Runtime;
 
 #[macro_use]
 mod binding;
-mod argconv;
+pub mod argconv;
 pub mod batch;
 pub mod cass_error;
 pub mod cass_types;

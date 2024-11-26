@@ -98,7 +98,7 @@ pub unsafe extern "C" fn cass_uuid_max_from_time(timestamp: cass_uint64_t, outpu
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_uuid_gen_new() -> *mut CassUuidGen {
+pub unsafe extern "C" fn cass_uuid_gen_new() -> CassOwnedMutPtr<CassUuidGen> {
     // Inspired by C++ driver implementation in its intent.
     // The original driver tries to generate a number that
     // uniquely identifies this machine and the current process.
@@ -122,7 +122,9 @@ pub unsafe extern "C" fn cass_uuid_gen_new() -> *mut CassUuidGen {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_uuid_gen_new_with_node(node: cass_uint64_t) -> *mut CassUuidGen {
+pub unsafe extern "C" fn cass_uuid_gen_new_with_node(
+    node: cass_uint64_t,
+) -> CassOwnedMutPtr<CassUuidGen> {
     BoxFFI::into_ptr(Box::new(CassUuidGen {
         clock_seq_and_node: rand_clock_seq_and_node(node & 0x0000FFFFFFFFFFFF),
         last_timestamp: AtomicU64::new(0),
@@ -130,8 +132,11 @@ pub unsafe extern "C" fn cass_uuid_gen_new_with_node(node: cass_uint64_t) -> *mu
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_uuid_gen_time(uuid_gen: *mut CassUuidGen, output: *mut CassUuid) {
-    let uuid_gen = BoxFFI::as_mut_ref(uuid_gen);
+pub unsafe extern "C" fn cass_uuid_gen_time(
+    uuid_gen: CassBorrowedMutPtr<CassUuidGen>,
+    output: *mut CassUuid,
+) {
+    let uuid_gen = BoxFFI::as_mut_ref(uuid_gen).unwrap();
 
     let uuid = CassUuid {
         time_and_version: set_version(monotonic_timestamp(&mut uuid_gen.last_timestamp), 1),
@@ -157,11 +162,11 @@ pub unsafe extern "C" fn cass_uuid_gen_random(_uuid_gen: *mut CassUuidGen, outpu
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_uuid_gen_from_time(
-    uuid_gen: *mut CassUuidGen,
+    uuid_gen: CassBorrowedMutPtr<CassUuidGen>,
     timestamp: cass_uint64_t,
     output: *mut CassUuid,
 ) {
-    let uuid_gen = BoxFFI::as_mut_ref(uuid_gen);
+    let uuid_gen = BoxFFI::as_mut_ref(uuid_gen).unwrap();
 
     let uuid = CassUuid {
         time_and_version: set_version(from_unix_timestamp(timestamp), 1),
@@ -250,6 +255,6 @@ pub unsafe extern "C" fn cass_uuid_from_string_n(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_uuid_gen_free(uuid_gen: *mut CassUuidGen) {
+pub unsafe extern "C" fn cass_uuid_gen_free(uuid_gen: CassOwnedMutPtr<CassUuidGen>) {
     BoxFFI::free(uuid_gen);
 }

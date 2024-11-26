@@ -4,7 +4,7 @@ use std::ffi::CStr;
 use std::marker::PhantomData;
 use std::os::raw::c_char;
 use std::ptr::NonNull;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 
 pub unsafe fn ptr_to_cstr(ptr: *const c_char) -> Option<&'static str> {
     CStr::from_ptr(ptr).to_str().ok()
@@ -281,29 +281,64 @@ impl<T: Sized> CassPtr<'_, T, (Mut,)> {
 /// Implement this trait for types that are allocated by the driver via [`Box::new`],
 /// and then returned to the user as a pointer. The user is responsible for freeing
 /// the memory associated with the pointer using corresponding driver's API function.
-pub trait BoxFFI {
-    fn into_ptr(self: Box<Self>) -> *mut Self {
+pub trait BoxFFI: Sized {
+    /// Consumes the Box and returns a pointer with exclusive ownership.
+    /// The pointer needs to be freed. See [`BoxFFI::free()`].
+    fn into_ptr<M: Mutability>(self: Box<Self>) -> CassPtr<'static, Self, (M,)> {
         #[allow(clippy::disallowed_methods)]
-        Box::into_raw(self)
+        let ptr = Box::into_raw(self);
+
+        // SAFETY:
+        // 1. validity guarantee - pointer is obviously valid. It comes from box allocation.
+        // 2. pointer's lifetime - we choose 'static lifetime. It is ok, because holder of the
+        //    pointer becomes the owner of pointee. He is responsible for freeing the memory
+        //    via BoxFFI::free() - which accepts 'static pointer. User is not able to obtain
+        //    another pointer with 'static lifetime pointing to the same memory.
+        // 3. mutability - user becomes an exclusive owner of the pointee. Thus, it's ok
+        //    for the pointer to be `Mut`.
+        unsafe { CassPtr::from_raw(ptr) }
     }
-    unsafe fn from_ptr(ptr: *mut Self) -> Box<Self> {
-        #[allow(clippy::disallowed_methods)]
-        Box::from_raw(ptr)
+
+    /// Consumes the pointer with exclusive ownership back to the Box.
+    fn from_ptr<M: Mutability>(ptr: CassPtr<'static, Self, (M,)>) -> Option<Box<Self>> {
+        // SAFETY:
+        // The only way to obtain an owned pointer (with 'static lifetime) is BoxFFI::into_ptr().
+        // It creates a pointer based on Box allocation. It is thus safe to convert the pointer
+        // back to owned `Box`.
+        unsafe {
+            ptr.to_raw().map(|p| {
+                #[allow(clippy::disallowed_methods)]
+                Box::from_raw(p)
+            })
+        }
     }
-    unsafe fn as_maybe_ref<'a>(ptr: *const Self) -> Option<&'a Self> {
-        #[allow(clippy::disallowed_methods)]
+
+    /// Creates a reference from an exclusive pointer.
+    /// Reference inherits the lifetime of the pointer's borrow.
+    #[allow(clippy::needless_lifetimes)]
+    fn as_ref<'a, M: Mutability>(ptr: CassPtr<'a, Self, (M,)>) -> Option<&'a Self> {
         ptr.as_ref()
     }
-    unsafe fn as_ref<'a>(ptr: *const Self) -> &'a Self {
-        #[allow(clippy::disallowed_methods)]
-        ptr.as_ref().unwrap()
+
+    /// Creates a mutable from an exlusive pointer.
+    /// Reference inherits the lifetime of the pointer's mutable borrow.
+    #[allow(clippy::needless_lifetimes)]
+    fn as_mut_ref<'a>(ptr: CassPtr<'a, Self, (Mut,)>) -> Option<&'a mut Self> {
+        ptr.as_mut_ref()
     }
-    unsafe fn as_mut_ref<'a>(ptr: *mut Self) -> &'a mut Self {
-        #[allow(clippy::disallowed_methods)]
-        ptr.as_mut().unwrap()
-    }
-    unsafe fn free(ptr: *mut Self) {
+
+    /// Frees the pointee.
+    fn free(ptr: CassPtr<'static, Self, (Mut,)>) {
         std::mem::drop(BoxFFI::from_ptr(ptr));
+    }
+
+    #[cfg(test)]
+    fn null<'a>() -> CassPtr<'a, Self, (Const,)> {
+        CassPtr::null()
+    }
+
+    fn null_mut<'a>() -> CassPtr<'a, Self, (Mut,)> {
+        CassPtr::null_mut()
     }
 }
 
@@ -313,35 +348,85 @@ pub trait BoxFFI {
 /// The data should be allocated via [`Arc::new`], and then returned to the user as a pointer.
 /// The user is responsible for freeing the memory associated
 /// with the pointer using corresponding driver's API function.
-pub trait ArcFFI {
-    fn as_ptr(self: &Arc<Self>) -> *const Self {
+pub trait ArcFFI: Sized {
+    /// Creates a pointer from a valid reference to Arc-allocated data.
+    /// Holder of the pointer borrows the pointee.
+    fn as_ptr<'a>(self: &'a Arc<Self>) -> CassPtr<'a, Self, (Const,)> {
         #[allow(clippy::disallowed_methods)]
-        Arc::as_ptr(self)
+        let ptr = Arc::as_ptr(self);
+
+        // SAFETY:
+        // 1. validity guarantee - pointer is valid, since it's obtained from Arc allocation
+        // 2. pointer's lifetime - pointer inherits the lifetime of provided Arc's borrow.
+        //    What's important is that the returned pointer borrows the data, and is not the
+        //    shared owner. Thus, user cannot call ArcFFI::free() on such pointer.
+        // 3. mutability - we always create a `Const` pointer.
+        unsafe { CassPtr::from_raw(ptr) }
     }
-    fn into_ptr(self: Arc<Self>) -> *const Self {
+
+    /// Creates a pointer from a valid Arc allocation.
+    fn into_ptr(self: Arc<Self>) -> CassPtr<'static, Self, (Const,)> {
         #[allow(clippy::disallowed_methods)]
-        Arc::into_raw(self)
+        let ptr = Arc::into_raw(self);
+
+        // SAFETY:
+        // 1. validity guarantee - pointer is valid, since it's obtained from Arc allocation
+        // 2. pointer's lifetime - returned pointer has a 'static lifetime. It is a shared
+        //    owner of the pointee. User has to decrease the RC of the pointer (and potentially free the memory)
+        //    via ArcFFI::free().
+        // 3. mutability - we always create a `Const` pointer.
+        unsafe { CassPtr::from_raw(ptr) }
     }
-    unsafe fn from_ptr(ptr: *const Self) -> Arc<Self> {
-        #[allow(clippy::disallowed_methods)]
-        Arc::from_raw(ptr)
+
+    /// Converts shared owned pointer back to owned Arc.
+    fn from_ptr(ptr: CassPtr<'static, Self, (Const,)>) -> Option<Arc<Self>> {
+        // SAFETY:
+        // The only way to obtain a pointer with shared ownership ('static lifetime) is
+        // ArcFFI::into_ptr(). It converts an owned Arc into the pointer. It is thus safe,
+        // to convert such pointer back to owned Arc.
+        unsafe {
+            ptr.to_raw().map(|p| {
+                #[allow(clippy::disallowed_methods)]
+                Arc::from_raw(p)
+            })
+        }
     }
-    unsafe fn cloned_from_ptr(ptr: *const Self) -> Arc<Self> {
-        #[allow(clippy::disallowed_methods)]
-        Arc::increment_strong_count(ptr);
-        #[allow(clippy::disallowed_methods)]
-        Arc::from_raw(ptr)
+
+    /// Increases the reference count of the pointer, and returns an owned Arc.
+    fn cloned_from_ptr(ptr: CassPtr<'_, Self, (Const,)>) -> Option<Arc<Self>> {
+        // SAFETY:
+        // All pointers created via ArcFFI API are originated from Arc allocation.
+        // It is thus safe, to increase the reference count of the pointer, and convert
+        // it to Arc. Because of the borrow-checker, it is not possible for the user
+        // to provide the pointer that points to already deallocated memory.
+        unsafe {
+            ptr.to_raw().map(|p| {
+                #[allow(clippy::disallowed_methods)]
+                Arc::increment_strong_count(p);
+                #[allow(clippy::disallowed_methods)]
+                Arc::from_raw(p)
+            })
+        }
     }
-    unsafe fn as_maybe_ref<'a>(ptr: *const Self) -> Option<&'a Self> {
-        #[allow(clippy::disallowed_methods)]
+
+    /// Converts a shared borrowed pointer to reference.
+    /// The reference inherits the lifetime of pointer's borrow.
+    #[allow(clippy::needless_lifetimes)]
+    fn as_ref<'a>(ptr: CassPtr<'a, Self, (Const,)>) -> Option<&'a Self> {
         ptr.as_ref()
     }
-    unsafe fn as_ref<'a>(ptr: *const Self) -> &'a Self {
-        #[allow(clippy::disallowed_methods)]
-        ptr.as_ref().unwrap()
-    }
-    unsafe fn free(ptr: *const Self) {
+
+    /// Decreases the reference count (and potentially frees) of the owned pointer.
+    fn free(ptr: CassPtr<'static, Self, (Const,)>) {
         std::mem::drop(ArcFFI::from_ptr(ptr));
+    }
+
+    fn null<'a>() -> CassPtr<'a, Self, (Const,)> {
+        CassPtr::null()
+    }
+
+    fn is_null(ptr: &CassPtr<'_, Self, (Const,)>) -> bool {
+        ptr.is_null()
     }
 }
 
@@ -353,12 +438,115 @@ pub trait ArcFFI {
 /// For example: lifetime of CassRow is bound by the lifetime of CassResult.
 /// There is no API function that frees the CassRow. It should be automatically
 /// freed when user calls cass_result_free.
-pub trait RefFFI {
-    fn as_ptr(&self) -> *const Self {
-        self as *const Self
+pub trait RefFFI: Sized {
+    /// Creates a borrowed pointer from a valid reference.
+    #[allow(clippy::needless_lifetimes)]
+    fn as_ptr<'a>(&'a self) -> CassPtr<'a, Self, (Const,)> {
+        // SAFETY:
+        // 1. validity guarantee - pointer is valid, since it's obtained a valid reference.
+        // 2. pointer's lifetime - pointer inherits the lifetime of provided reference's borrow.
+        // 3. mutability - we always create a `Const` pointer.
+        unsafe { CassPtr::from_raw(self) }
     }
-    unsafe fn as_ref<'a>(ptr: *const Self) -> &'a Self {
-        #[allow(clippy::disallowed_methods)]
-        ptr.as_ref().unwrap()
+
+    /// Creates a borrowed pointer from a weak reference.
+    ///
+    /// ## SAFETY
+    /// User needs to ensure that the pointee is not freed when pointer is being
+    /// dereferenced.
+    #[allow(clippy::needless_lifetimes)]
+    unsafe fn weak_as_ptr<'a>(w: &'a Weak<Self>) -> CassPtr<'a, Self, (Const,)> {
+        match w.upgrade() {
+            Some(a) => {
+                #[allow(clippy::disallowed_methods)]
+                let ptr = Arc::as_ptr(&a);
+                unsafe { CassPtr::from_raw(ptr) }
+            }
+            None => CassPtr::null(),
+        }
+    }
+
+    /// Converts a borrowed pointer to reference.
+    /// The reference inherits the lifetime of pointer's borrow.
+    #[allow(clippy::needless_lifetimes)]
+    fn as_ref<'a>(ptr: CassPtr<'a, Self, (Const,)>) -> Option<&'a Self> {
+        ptr.as_ref()
+    }
+
+    fn null<'a>() -> CassPtr<'a, Self, (Const,)> {
+        CassPtr::null()
+    }
+
+    fn is_null(ptr: &CassPtr<'_, Self, (Const,)>) -> bool {
+        ptr.is_null()
     }
 }
+
+/// ```compile_fail,E0499
+/// # use scylla_cpp_driver::argconv::{CassOwnedMutPtr, CassBorrowedMutPtr};
+/// # use scylla_cpp_driver::argconv::BoxFFI;
+/// struct Foo;
+/// impl BoxFFI for Foo {}
+///
+/// let mut ptr: CassOwnedMutPtr<Foo> = BoxFFI::into_ptr(Box::new(Foo));
+/// let borrowed_mut_ptr1: CassBorrowedMutPtr<Foo> = ptr.borrow_mut();
+/// let borrowed_mut_ptr2: CassBorrowedMutPtr<Foo> = ptr.borrow_mut();
+/// let mutref1 = BoxFFI::as_mut_ref(borrowed_mut_ptr2);
+/// let mutref2 = BoxFFI::as_mut_ref(borrowed_mut_ptr1);
+/// ```
+fn _test_box_ffi_cannot_have_two_mutable_references() {}
+
+/// ```compile_fail,E0502
+/// # use scylla_cpp_driver::argconv::{CassOwnedMutPtr, CassBorrowedPtr, CassBorrowedMutPtr};
+/// # use scylla_cpp_driver::argconv::BoxFFI;
+/// struct Foo;
+/// impl BoxFFI for Foo {}
+///
+/// let mut ptr: CassOwnedMutPtr<Foo> = BoxFFI::into_ptr(Box::new(Foo));
+/// let borrowed_mut_ptr: CassBorrowedMutPtr<Foo> = ptr.borrow_mut();
+/// let borrowed_ptr: CassBorrowedPtr<Foo> = ptr.borrow();
+/// let immref = BoxFFI::as_ref(borrowed_ptr);
+/// let mutref = BoxFFI::as_mut_ref(borrowed_mut_ptr);
+/// ```
+fn _test_box_ffi_cannot_have_mutable_and_immutable_references_at_the_same_time() {}
+
+/// ```compile_fail,E0505
+/// # use scylla_cpp_driver::argconv::{CassOwnedMutPtr, CassBorrowedPtr};
+/// # use scylla_cpp_driver::argconv::BoxFFI;
+/// struct Foo;
+/// impl BoxFFI for Foo {}
+///
+/// let ptr: CassOwnedMutPtr<Foo> = BoxFFI::into_ptr(Box::new(Foo));
+/// let borrowed_ptr: CassBorrowedPtr<Foo> = ptr.borrow();
+/// BoxFFI::free(ptr);
+/// let immref = BoxFFI::as_ref(borrowed_ptr);
+/// ```
+fn _test_box_ffi_cannot_free_while_having_borrowed_pointer() {}
+
+/// ```compile_fail,E0505
+/// # use scylla_cpp_driver::argconv::{CassOwnedPtr, CassBorrowedPtr};
+/// # use scylla_cpp_driver::argconv::ArcFFI;
+/// # use std::sync::Arc;
+/// struct Foo;
+/// impl ArcFFI for Foo {}
+///
+/// let ptr: CassOwnedPtr<Foo> = ArcFFI::into_ptr(Arc::new(Foo));
+/// let borrowed_ptr: CassBorrowedPtr<Foo> = ptr.borrow();
+/// ArcFFI::free(ptr);
+/// let immref = ArcFFI::cloned_from_ptr(borrowed_ptr);
+/// ```
+fn _test_arc_ffi_cannot_clone_after_free() {}
+
+/// ```compile_fail,E0505
+/// # use scylla_cpp_driver::argconv::{CassBorrowedPtr};
+/// # use scylla_cpp_driver::argconv::ArcFFI;
+/// # use std::sync::Arc;
+/// struct Foo;
+/// impl ArcFFI for Foo {}
+///
+/// let arc = Arc::new(Foo);
+/// let borrowed_ptr: CassBorrowedPtr<Foo> = ArcFFI::as_ptr(&arc);
+/// std::mem::drop(arc);
+/// let immref = ArcFFI::cloned_from_ptr(borrowed_ptr);
+/// ```
+fn _test_arc_ffi_cannot_dereference_borrowed_after_drop() {}

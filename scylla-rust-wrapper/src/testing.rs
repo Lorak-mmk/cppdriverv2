@@ -21,7 +21,7 @@ macro_rules! assert_cass_future_error_message_eq {
 
         let mut ___message: *const c_char = ::std::ptr::null();
         let mut ___msg_len: size_t = 0;
-        cass_future_error_message($cass_fut, &mut ___message, &mut ___msg_len);
+        cass_future_error_message($cass_fut.borrow(), &mut ___message, &mut ___msg_len);
         assert_eq!(ptr_to_cstr_n(___message, ___msg_len), $error_msg_opt);
     };
 }
