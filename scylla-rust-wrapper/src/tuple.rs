@@ -6,8 +6,10 @@ use crate::types::*;
 use crate::value;
 use crate::value::CassCqlValue;
 use std::sync::Arc;
+use std::sync::LazyLock;
 
-static UNTYPED_TUPLE_TYPE: CassDataType = CassDataType::new(CassDataTypeInner::Tuple(Vec::new()));
+static UNTYPED_TUPLE_TYPE: LazyLock<Arc<CassDataType>> =
+    LazyLock::new(|| CassDataType::new_arced(CassDataTypeInner::Tuple(Vec::new())));
 
 #[derive(Clone)]
 pub struct CassTuple {
@@ -92,7 +94,7 @@ unsafe extern "C" fn cass_tuple_free(tuple: *mut CassTuple) {
 unsafe extern "C" fn cass_tuple_data_type(tuple: *const CassTuple) -> *const CassDataType {
     match &BoxFFI::as_ref(tuple).data_type {
         Some(t) => ArcFFI::as_ptr(t),
-        None => &UNTYPED_TUPLE_TYPE,
+        None => ArcFFI::as_ptr(&UNTYPED_TUPLE_TYPE),
     }
 }
 
@@ -116,3 +118,34 @@ make_binders!(decimal, cass_tuple_set_decimal);
 make_binders!(collection, cass_tuple_set_collection);
 make_binders!(tuple, cass_tuple_set_tuple);
 make_binders!(user_type, cass_tuple_set_user_type);
+
+#[cfg(test)]
+mod tests {
+    use crate::cass_types::{
+        cass_data_type_add_sub_type, cass_data_type_free, cass_data_type_new, CassValueType,
+    };
+
+    use super::{cass_tuple_data_type, cass_tuple_new};
+
+    #[test]
+    fn regression_empty_tuple_data_type_test() {
+        // This is a regression test that checks whether tuples return
+        // an Arc-based pointer for their type, even if they are empty.
+        // Previously, they would return the pointer to static data, but not Arc allocated.
+        unsafe {
+            let empty_tuple = cass_tuple_new(2);
+
+            // This would previously return a non Arc-based pointer.
+            let empty_tuple_dt = cass_tuple_data_type(empty_tuple);
+
+            let empty_set_dt = cass_data_type_new(CassValueType::CASS_VALUE_TYPE_SET);
+            // This will try to increment the reference count of `empty_tuple_dt`.
+            // Previously, this would fail, because `empty_tuple_dt` did not originate from an Arc allocation.
+            cass_data_type_add_sub_type(empty_set_dt, empty_tuple_dt);
+
+            // Cast to *mut, because `cass_data_type_new` returns a *const. See the comment
+            // in this function to see why.
+            cass_data_type_free(empty_set_dt as *mut _)
+        }
+    }
+}
