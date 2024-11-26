@@ -40,9 +40,9 @@ struct BoundCallback {
 unsafe impl Send for BoundCallback {}
 
 impl BoundCallback {
-    fn invoke(self, fut: &CassFuture) {
+    fn invoke(self, fut_ptr: *const CassFuture) {
         unsafe {
-            self.cb.unwrap()(fut as *const CassFuture, self.data);
+            self.cb.unwrap()(fut_ptr, self.data);
         }
     }
 }
@@ -96,7 +96,8 @@ impl CassFuture {
                 guard.callback.take()
             };
             if let Some(bound_cb) = maybe_cb {
-                bound_cb.invoke(cass_fut_clone.as_ref());
+                let fut_ptr = ArcFFI::as_ptr(&cass_fut_clone);
+                bound_cb.invoke(fut_ptr);
             }
 
             cass_fut_clone.wait_for_value.notify_all();
@@ -258,7 +259,12 @@ impl CassFuture {
         }
     }
 
-    pub fn set_callback(&self, cb: CassFutureCallback, data: *mut c_void) -> CassError {
+    pub fn set_callback(
+        &self,
+        self_ptr: *const CassFuture,
+        cb: CassFutureCallback,
+        data: *mut c_void,
+    ) -> CassError {
         let mut lock = self.state.lock().unwrap();
         if lock.callback.is_some() {
             // Another callback has been already set
@@ -268,7 +274,7 @@ impl CassFuture {
         if lock.value.is_some() {
             // The value is already available, we need to call the callback ourselves
             mem::drop(lock);
-            bound_cb.invoke(self);
+            bound_cb.invoke(self_ptr);
             return CassError::CASS_OK;
         }
         // Store the callback
@@ -293,7 +299,7 @@ pub unsafe extern "C" fn cass_future_set_callback(
     callback: CassFutureCallback,
     data: *mut ::std::os::raw::c_void,
 ) -> CassError {
-    ArcFFI::as_ref(future_raw).set_callback(callback, data)
+    ArcFFI::as_ref(future_raw).set_callback(future_raw, callback, data)
 }
 
 #[no_mangle]
