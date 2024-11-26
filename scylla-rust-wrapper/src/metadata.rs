@@ -51,7 +51,7 @@ impl RefFFI for CassMaterializedViewMeta {}
 
 pub struct CassColumnMeta {
     pub name: String,
-    pub column_type: CassDataType,
+    pub column_type: Arc<CassDataType>,
     pub column_kind: CassColumnType,
 }
 
@@ -71,11 +71,11 @@ pub unsafe fn create_table_metadata(
         .for_each(|(column_name, column_metadata)| {
             let cass_column_meta = CassColumnMeta {
                 name: column_name.clone(),
-                column_type: get_column_type_from_cql_type(
+                column_type: Arc::new(get_column_type_from_cql_type(
                     &column_metadata.type_,
                     user_defined_types,
                     keyspace_name,
-                ),
+                )),
                 column_kind: match column_metadata.kind {
                     ColumnKind::Regular => CassColumnType::CASS_COLUMN_TYPE_REGULAR,
                     ColumnKind::Static => CassColumnType::CASS_COLUMN_TYPE_STATIC,
@@ -305,7 +305,7 @@ pub unsafe extern "C" fn cass_column_meta_data_type(
     column_meta: *const CassColumnMeta,
 ) -> *const CassDataType {
     let column_meta = RefFFI::as_ref(column_meta);
-    &column_meta.column_type as *const CassDataType
+    ArcFFI::as_ptr(&column_meta.column_type)
 }
 
 #[no_mangle]
