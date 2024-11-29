@@ -13,7 +13,10 @@ use scylla::retry_policy::RetryPolicy;
 use scylla::speculative_execution::SimpleSpeculativeExecutionPolicy;
 use scylla::statement::Consistency;
 
-use crate::argconv::{ptr_to_cstr_n, strlen, ArcFFI, BoxFFI, CassExclusiveMutPtr, CassSharedPtr};
+use crate::argconv::{
+    ptr_to_cstr_n, strlen, ArcFFI, BoxFFI, CassExclusiveMutPtr, CassSharedPtr, OwnershipExclusive,
+    FFI,
+};
 use crate::batch::CassBatch;
 use crate::cass_error::CassError;
 use crate::cass_types::CassConsistency;
@@ -37,7 +40,9 @@ pub struct CassExecProfile {
     load_balancing_config: LoadBalancingConfig,
 }
 
-impl BoxFFI for CassExecProfile {}
+impl FFI for CassExecProfile {
+    type Ownership = OwnershipExclusive;
+}
 
 impl CassExecProfile {
     fn new() -> Self {

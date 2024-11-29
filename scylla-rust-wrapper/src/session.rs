@@ -138,7 +138,9 @@ impl CassSessionInner {
 
 pub type CassSession = RwLock<Option<CassSessionInner>>;
 
-impl ArcFFI for CassSession {}
+impl FFI for CassSession {
+    type Ownership = OwnershipShared;
+}
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_session_new() -> CassSharedPtr<CassSession> {

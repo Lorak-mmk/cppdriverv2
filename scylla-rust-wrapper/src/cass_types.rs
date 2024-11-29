@@ -175,7 +175,9 @@ pub enum CassDataTypeInner {
     Custom(String),
 }
 
-impl ArcFFI for CassDataType {}
+impl FFI for CassDataType {
+    type Ownership = OwnershipShared;
+}
 
 impl CassDataTypeInner {
     /// Checks for equality during typechecks.

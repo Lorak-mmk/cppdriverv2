@@ -95,7 +95,9 @@ impl CassResult {
     }
 }
 
-impl ArcFFI for CassResult {}
+impl FFI for CassResult {
+    type Ownership = OwnershipShared;
+}
 
 #[derive(Debug)]
 pub struct CassResultMetadata {
@@ -149,7 +151,9 @@ pub struct CassRow {
     pub result_metadata: Arc<CassResultMetadata>,
 }
 
-impl RefFFI for CassRow {}
+impl FFI for CassRow {
+    type Ownership = OwnershipBorrowed;
+}
 
 pub fn create_cass_rows_from_rows(
     rows: Vec<Row>,
@@ -185,7 +189,9 @@ pub struct CassValue {
     pub value_type: Arc<CassDataType>,
 }
 
-impl RefFFI for CassValue {}
+impl FFI for CassValue {
+    type Ownership = OwnershipBorrowed;
+}
 
 fn create_cass_row_columns(row: Row, metadata: &Arc<CassResultMetadata>) -> Vec<CassValue> {
     row.columns
@@ -367,7 +373,9 @@ pub enum CassIterator {
     CassViewMetaIterator(CassViewMetaIterator),
 }
 
-impl BoxFFI for CassIterator {}
+impl FFI for CassIterator {
+    type Ownership = OwnershipExclusive;
+}
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_iterator_free(iterator: CassExclusiveMutPtr<CassIterator>) {

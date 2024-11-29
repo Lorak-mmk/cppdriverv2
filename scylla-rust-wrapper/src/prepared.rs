@@ -72,7 +72,9 @@ impl CassPrepared {
     }
 }
 
-impl ArcFFI for CassPrepared {}
+impl FFI for CassPrepared {
+    type Ownership = OwnershipShared;
+}
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_prepared_free(prepared_raw: CassSharedPtr<CassPrepared>) {

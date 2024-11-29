@@ -2,7 +2,7 @@ use scylla::retry_policy::{DefaultRetryPolicy, FallthroughRetryPolicy};
 use scylla::transport::downgrading_consistency_retry_policy::DowngradingConsistencyRetryPolicy;
 use std::sync::Arc;
 
-use crate::argconv::{ArcFFI, CassSharedPtr};
+use crate::argconv::{ArcFFI, CassSharedPtr, OwnershipShared, FFI};
 
 pub enum RetryPolicy {
     DefaultRetryPolicy(Arc<DefaultRetryPolicy>),
@@ -12,7 +12,9 @@ pub enum RetryPolicy {
 
 pub type CassRetryPolicy = RetryPolicy;
 
-impl ArcFFI for CassRetryPolicy {}
+impl FFI for CassRetryPolicy {
+    type Ownership = OwnershipShared;
+}
 
 #[no_mangle]
 pub extern "C" fn cass_retry_policy_default_new() -> CassSharedPtr<CassRetryPolicy> {

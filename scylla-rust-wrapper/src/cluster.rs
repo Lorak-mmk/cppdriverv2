@@ -165,7 +165,9 @@ impl CassCluster {
     }
 }
 
-impl BoxFFI for CassCluster {}
+impl FFI for CassCluster {
+    type Ownership = OwnershipExclusive;
+}
 
 pub struct CassCustomPayload;
 

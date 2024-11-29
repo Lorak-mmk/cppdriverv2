@@ -13,7 +13,9 @@ pub struct CassSchemaMeta {
     pub keyspaces: HashMap<String, CassKeyspaceMeta>,
 }
 
-impl BoxFFI for CassSchemaMeta {}
+impl FFI for CassSchemaMeta {
+    type Ownership = OwnershipExclusive;
+}
 
 pub struct CassKeyspaceMeta {
     pub name: String,
@@ -25,7 +27,9 @@ pub struct CassKeyspaceMeta {
 }
 
 // Owned by CassSchemaMeta
-impl RefFFI for CassKeyspaceMeta {}
+impl FFI for CassKeyspaceMeta {
+    type Ownership = OwnershipBorrowed;
+}
 
 pub struct CassTableMeta {
     pub name: String,
@@ -38,7 +42,9 @@ pub struct CassTableMeta {
 // Either:
 // - owned by CassMaterializedViewMeta - won't be given to user
 // - Owned by CassKeyspaceMeta (in Arc), referenced (Weak) by CassMaterializedViewMeta
-impl RefFFI for CassTableMeta {}
+impl FFI for CassTableMeta {
+    type Ownership = OwnershipBorrowed;
+}
 
 pub struct CassMaterializedViewMeta {
     pub name: String,
@@ -47,7 +53,9 @@ pub struct CassMaterializedViewMeta {
 }
 
 // Shared ownership by CassKeyspaceMeta and CassTableMeta
-impl RefFFI for CassMaterializedViewMeta {}
+impl FFI for CassMaterializedViewMeta {
+    type Ownership = OwnershipBorrowed;
+}
 
 pub struct CassColumnMeta {
     pub name: String,
@@ -56,7 +64,9 @@ pub struct CassColumnMeta {
 }
 
 // Owned by CassTableMeta
-impl RefFFI for CassColumnMeta {}
+impl FFI for CassColumnMeta {
+    type Ownership = OwnershipBorrowed;
+}
 
 pub unsafe fn create_table_metadata(
     keyspace_name: &str,

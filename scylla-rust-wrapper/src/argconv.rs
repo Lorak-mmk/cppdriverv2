@@ -343,12 +343,18 @@ impl<T: Sized> CassPtr<T, (Borrowed, Const)> {
     }
 }
 
+mod own_sealed {
+    pub trait ExclusiveSealed {}
+    pub trait SharedSealed {}
+    pub trait BorrowedSealed {}
+}
+
 /// Defines a pointer manipulation API for non-shared heap-allocated data.
 ///
 /// Implement this trait for types that are allocated by the driver via [`Box::new`],
 /// and then returned to the user as a pointer. The user is responsible for freeing
 /// the memory associated with the pointer using corresponding driver's API function.
-pub trait BoxFFI: Sized {
+pub trait BoxFFI: Sized + own_sealed::ExclusiveSealed {
     fn into_ptr<M: Mutability>(self: Box<Self>) -> CassExclusivePtr<Self, M> {
         CassExclusivePtr::from_box(self)
     }
@@ -382,7 +388,7 @@ pub trait BoxFFI: Sized {
 /// The data should be allocated via [`Arc::new`], and then returned to the user as a pointer.
 /// The user is responsible for freeing the memory associated
 /// with the pointer using corresponding driver's API function.
-pub trait ArcFFI: Sized {
+pub trait ArcFFI: Sized + own_sealed::SharedSealed {
     fn as_ptr(self: &Arc<Self>) -> CassSharedPtr<Self> {
         CassSharedPtr::from_ref(self)
     }
@@ -423,7 +429,7 @@ pub trait ArcFFI: Sized {
 /// For example: lifetime of CassRow is bound by the lifetime of CassResult.
 /// There is no API function that frees the CassRow. It should be automatically
 /// freed when user calls cass_result_free.
-pub trait RefFFI: Sized {
+pub trait RefFFI: Sized + own_sealed::BorrowedSealed {
     fn as_ptr(&self) -> CassBorrowedPtr<Self> {
         CassBorrowedPtr::from_ref(self)
     }
@@ -440,3 +446,71 @@ pub trait RefFFI: Sized {
         ptr.is_null()
     }
 }
+
+/// This trait should be implemented for types that are passed between
+/// C and Rust API. We currently distinguish 3 kinds of implementors,
+/// wrt. the ownership. The implementor should pick one of the 3 ownership
+/// kinds as the associated type:
+/// - [`OwnershipExclusive`]
+/// - [`OwnershipShared`]
+/// - [`OwnershipBorrowed`]
+#[allow(clippy::upper_case_acronyms)]
+pub trait FFI {
+    type Ownership;
+}
+
+/// Represents types with an exclusive ownership.
+///
+/// Use this associated type for implementors that require:
+/// - [`CassExclusivePtr`] manipulation via [`BoxFFI`]
+/// - exclusive ownership of the corresponding object
+/// - potential mutability of the corresponding object
+/// - manual memory freeing
+///
+/// C API user should be responsible for freeing associated memory manually
+/// via corresponding API call.
+///
+/// An example of such implementor would be [`CassCluster`](crate::cluster::CassCluster):
+/// - it is allocated on the heap via [`Box::new`]
+/// - user is the exclusive owner of the CassCluster object
+/// - there is no API to increase a reference count of CassCluster object
+/// - CassCluster is mutable via some API methods (`cass_cluster_set_*`)
+/// - user is responsible for freeing the associated memory (`cass_cluster_free`)
+pub struct OwnershipExclusive;
+impl<T> own_sealed::ExclusiveSealed for T where T: FFI<Ownership = OwnershipExclusive> {}
+impl<T> BoxFFI for T where T: FFI<Ownership = OwnershipExclusive> {}
+
+/// Represents types with a shared ownership.
+///
+/// Use this associated type for implementors that require:
+/// - [`CassSharedPtr`] manipulation via [`ArcFFI`]
+/// - shared ownership of the corresponding object
+/// - manual memory freeing
+///
+/// C API user should be responsible for freeing (decreasing reference count of)
+/// associated memory manually via corresponding API call.
+///
+/// An example of such implementor would be [`CassDataType`](crate::cass_types::CassDataType):
+/// - it is allocated on the heap via [`Arc::new`]
+/// - there are multiple owners of the shared CassDataType object
+/// - some API functions require to increase a reference count of the object
+/// - user is responsible for freeing (decreasing RC of) the associated memory (`cass_data_type_free`)
+pub struct OwnershipShared;
+impl<T> own_sealed::SharedSealed for T where T: FFI<Ownership = OwnershipShared> {}
+impl<T> ArcFFI for T where T: FFI<Ownership = OwnershipShared> {}
+
+/// Represents borrowed types.
+///
+/// Use this associated type for implementors that do not require any assumptions
+/// about the pointer type (apart from validity).
+/// The implementation will enable [`CassBorrowedPtr`] manipulation via [`RefFFI`]
+///
+/// C API user is not responsible for freeing associated memory manually. The memory
+/// should be freed automatically, when the owner is being dropped.
+///
+/// An example of such implementor would be [`CassRow`](crate::query_result::CassRow):
+/// - its lifetime is tied to the lifetime of CassResult
+/// - user only "borrows" the pointer - he is not responsible for freeing the memory
+pub struct OwnershipBorrowed;
+impl<T> own_sealed::BorrowedSealed for T where T: FFI<Ownership = OwnershipBorrowed> {}
+impl<T> RefFFI for T where T: FFI<Ownership = OwnershipBorrowed> {}
