@@ -175,7 +175,9 @@ pub enum CassDataTypeInner {
     Custom(String),
 }
 
-impl ArcFFI for CassDataType {}
+impl FFI for CassDataType {
+    type Origin = FromArc;
+}
 
 impl CassDataTypeInner {
     /// Checks for equality during typechecks.

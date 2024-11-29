@@ -165,7 +165,9 @@ impl CassCluster {
     }
 }
 
-impl BoxFFI for CassCluster {}
+impl FFI for CassCluster {
+    type Origin = FromBox;
+}
 
 pub struct CassCustomPayload;
 

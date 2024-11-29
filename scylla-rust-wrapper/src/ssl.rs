@@ -1,6 +1,8 @@
 use crate::argconv::ArcFFI;
 use crate::argconv::CassBorrowedPtr;
 use crate::argconv::CassOwnedPtr;
+use crate::argconv::FromArc;
+use crate::argconv::FFI;
 use crate::cass_error::CassError;
 use crate::types::size_t;
 use libc::{c_int, strlen};
@@ -21,7 +23,9 @@ pub struct CassSsl {
     pub(crate) trusted_store: *mut X509_STORE,
 }
 
-impl ArcFFI for CassSsl {}
+impl FFI for CassSsl {
+    type Origin = FromArc;
+}
 
 pub const CASS_SSL_VERIFY_NONE: i32 = 0x00;
 pub const CASS_SSL_VERIFY_PEER_CERT: i32 = 0x01;

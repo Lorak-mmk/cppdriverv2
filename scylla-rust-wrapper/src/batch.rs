@@ -1,4 +1,6 @@
-use crate::argconv::{ArcFFI, BoxFFI, CassBorrowedMutPtr, CassBorrowedPtr, CassOwnedMutPtr};
+use crate::argconv::{
+    ArcFFI, BoxFFI, CassBorrowedMutPtr, CassBorrowedPtr, CassOwnedMutPtr, FromBox, FFI,
+};
 use crate::cass_error::CassError;
 use crate::cass_types::CassConsistency;
 use crate::cass_types::{make_batch_type, CassBatchType};
@@ -19,7 +21,9 @@ pub struct CassBatch {
     pub(crate) exec_profile: Option<PerStatementExecProfile>,
 }
 
-impl BoxFFI for CassBatch {}
+impl FFI for CassBatch {
+    type Origin = FromBox;
+}
 
 #[derive(Clone)]
 pub struct CassBatchState {

@@ -36,7 +36,9 @@ pub struct CassCollection {
     pub items: Vec<CassCqlValue>,
 }
 
-impl BoxFFI for CassCollection {}
+impl FFI for CassCollection {
+    type Origin = FromBox;
+}
 
 impl CassCollection {
     fn typecheck_on_append(&self, value: &Option<CassCqlValue>) -> CassError {

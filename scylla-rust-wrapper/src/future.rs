@@ -60,7 +60,9 @@ pub struct CassFuture {
     wait_for_value: Condvar,
 }
 
-impl ArcFFI for CassFuture {}
+impl FFI for CassFuture {
+    type Origin = FromArc;
+}
 
 /// An error that can appear during `cass_future_wait_timed`.
 enum FutureError {

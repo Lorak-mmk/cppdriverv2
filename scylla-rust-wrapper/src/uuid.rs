@@ -17,7 +17,9 @@ pub struct CassUuidGen {
     pub last_timestamp: AtomicU64,
 }
 
-impl BoxFFI for CassUuidGen {}
+impl FFI for CassUuidGen {
+    type Origin = FromBox;
+}
 
 // Implementation directly ported from Cpp Driver implementation:
 

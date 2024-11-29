@@ -15,6 +15,7 @@ use scylla::statement::Consistency;
 
 use crate::argconv::{
     ptr_to_cstr_n, strlen, ArcFFI, BoxFFI, CassBorrowedMutPtr, CassBorrowedPtr, CassOwnedMutPtr,
+    FromBox, FFI,
 };
 use crate::batch::CassBatch;
 use crate::cass_error::CassError;
@@ -39,7 +40,9 @@ pub struct CassExecProfile {
     load_balancing_config: LoadBalancingConfig,
 }
 
-impl BoxFFI for CassExecProfile {}
+impl FFI for CassExecProfile {
+    type Origin = FromBox;
+}
 
 impl CassExecProfile {
     fn new() -> Self {

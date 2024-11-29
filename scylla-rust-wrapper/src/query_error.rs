@@ -19,7 +19,9 @@ pub enum CassErrorResult {
     Deserialization(#[from] DeserializationError),
 }
 
-impl ArcFFI for CassErrorResult {}
+impl FFI for CassErrorResult {
+    type Origin = FromArc;
+}
 
 impl From<Consistency> for CassConsistency {
     fn from(c: Consistency) -> CassConsistency {

@@ -17,7 +17,9 @@ pub struct CassTuple {
     pub items: Vec<Option<CassCqlValue>>,
 }
 
-impl BoxFFI for CassTuple {}
+impl FFI for CassTuple {
+    type Origin = FromBox;
+}
 
 impl CassTuple {
     fn get_types(&self) -> Option<&Vec<Arc<CassDataType>>> {

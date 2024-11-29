@@ -14,7 +14,9 @@ pub struct CassUserType {
     pub field_values: Vec<Option<CassCqlValue>>,
 }
 
-impl BoxFFI for CassUserType {}
+impl FFI for CassUserType {
+    type Origin = FromBox;
+}
 
 impl CassUserType {
     fn set_field_by_index(&mut self, index: usize, value: Option<CassCqlValue>) -> CassError {

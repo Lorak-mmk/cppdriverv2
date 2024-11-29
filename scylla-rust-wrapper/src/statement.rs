@@ -216,7 +216,9 @@ pub struct CassStatement {
     pub(crate) exec_profile: Option<PerStatementExecProfile>,
 }
 
-impl BoxFFI for CassStatement {}
+impl FFI for CassStatement {
+    type Origin = FromBox;
+}
 
 impl CassStatement {
     fn bind_cql_value(&mut self, index: usize, value: Option<CassCqlValue>) -> CassError {
