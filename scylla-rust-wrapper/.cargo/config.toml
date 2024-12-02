@@ -1,0 +1,2 @@
+[build]
+rustflags = ["--cfg", "cpp_rust_unstable"]

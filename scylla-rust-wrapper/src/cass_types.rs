@@ -387,6 +387,7 @@ pub fn get_column_type_from_cql_type(
                 *frozen,
             ))
         }
+        CqlType::Vector { .. } => unimplemented!("CQL vector type is not yet supported"),
     };
 
     CassDataType::new(inner)

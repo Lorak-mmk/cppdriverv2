@@ -10,7 +10,7 @@ categories = ["database"]
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-scylla = { git = "https://github.com/scylladb/scylla-rust-driver.git", rev = "v0.15.0", features = [
+scylla = { git = "https://github.com/scylladb/scylla-rust-driver.git", rev = "847e44d6", features = [
     "ssl",
 ] }
 tokio = { version = "1.27.0", features = ["full"] }
@@ -25,14 +25,14 @@ openssl = "0.10.32"
 tracing-subscriber = { version = "0.3.15", features = ["env-filter"] }
 tracing = "0.1.37"
 futures = "0.3"
-thiserror = "1.0"
+thiserror = "2.0"
 
 [build-dependencies]
 bindgen = "0.65"
 chrono = "0.4.20"
 
 [dev-dependencies]
-scylla-proxy = { git = "https://github.com/scylladb/scylla-rust-driver.git", rev = "v0.15.0" }
+scylla-proxy = { git = "https://github.com/scylladb/scylla-rust-driver.git", rev = "847e44d6" }
 
 assert_matches = "1.5.0"
 ntest = "0.9.3"
