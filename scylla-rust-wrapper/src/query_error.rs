@@ -15,7 +15,7 @@ pub enum CassErrorResult {
     Query(#[from] QueryError),
     #[error(transparent)]
     ResultMetadataLazyDeserialization(#[from] ResultMetadataAndRowsCountParseError),
-    #[error("Failed to deserialize rows: {0}")]
+    #[error("Failed to deserialize first row: {0}")]
     Deserialization(#[from] DeserializationError),
 }
 
