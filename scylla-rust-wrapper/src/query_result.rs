@@ -29,7 +29,7 @@ pub enum CassResultKind {
 
 pub struct CassRowsResult {
     pub raw_rows: DeserializedMetadataAndRawRows,
-    pub first_row: Option<CassRow>,
+    pub first_row: Option<CassRow<'static>>,
     pub metadata: Arc<CassResultMetadata>,
 }
 
@@ -37,6 +37,22 @@ pub struct CassResult {
     pub tracing_id: Option<Uuid>,
     pub paging_state_response: PagingStateResponse,
     pub kind: CassResultKind,
+}
+
+impl CassRowsResult {
+    unsafe fn create_first_row(
+        raw_rows: &DeserializedMetadataAndRawRows,
+        metadata: &CassResultMetadata,
+    ) -> Result<Option<CassRow<'static>>, CassErrorResult> {
+        let first_row = raw_rows
+            .rows_iter::<Row>()
+            .unwrap()
+            .next()
+            .transpose()?
+            .map(|row| std::mem::transmute(CassRow::from_row_and_metadata(row, metadata)));
+
+        Ok(first_row)
+    }
 }
 
 impl CassResult {
@@ -61,12 +77,7 @@ impl CassResult {
                 });
 
                 let (raw_rows, tracing_id, _) = rows_result.into_inner();
-                let first_row = raw_rows
-                    .rows_iter::<Row>()
-                    .unwrap()
-                    .next()
-                    .transpose()?
-                    .map(|row| CassRow::from_row_and_metadata(row, &metadata));
+                let first_row = unsafe { CassRowsResult::create_first_row(&raw_rows, &metadata)? };
 
                 let cass_result = CassResult {
                     tracing_id,
@@ -147,20 +158,20 @@ impl CassResultMetadata {
 
 /// The lifetime of CassRow is bound to CassResult.
 /// It will be freed, when CassResult is freed.(see #[cass_result_free])
-pub struct CassRow {
+pub struct CassRow<'result> {
     pub columns: Vec<CassValue>,
-    pub result_metadata: Arc<CassResultMetadata>,
+    pub result_metadata: &'result CassResultMetadata,
 }
 
-impl FFI for CassRow {
+impl FFI for CassRow<'_> {
     type Ownership = OwnershipBorrowed;
 }
 
-impl CassRow {
-    fn from_row_and_metadata(row: Row, metadata: &Arc<CassResultMetadata>) -> Self {
+impl<'result> CassRow<'result> {
+    fn from_row_and_metadata(row: Row, metadata: &'result CassResultMetadata) -> CassRow<'result> {
         Self {
             columns: create_cass_row_columns(row, metadata),
-            result_metadata: Arc::clone(metadata),
+            result_metadata: metadata,
         }
     }
 }
@@ -191,7 +202,7 @@ impl FFI for CassValue {
     type Ownership = OwnershipBorrowed;
 }
 
-fn create_cass_row_columns(row: Row, metadata: &Arc<CassResultMetadata>) -> Vec<CassValue> {
+fn create_cass_row_columns(row: Row, metadata: &CassResultMetadata) -> Vec<CassValue> {
     row.columns
         .into_iter()
         .zip(metadata.col_specs.iter())
@@ -305,19 +316,19 @@ fn get_column_value(column: CqlValue, column_type: &Arc<CassDataType>) -> Value 
     }
 }
 
-pub struct CassRowsResultIterator {
-    iterator: TypedRowIterator<'static, 'static, Row>,
-    result_metadata: Arc<CassResultMetadata>,
-    current_row: Option<CassRow>,
+pub struct CassRowsResultIterator<'result> {
+    iterator: TypedRowIterator<'result, 'result, Row>,
+    result_metadata: &'result CassResultMetadata,
+    current_row: Option<CassRow<'result>>,
 }
 
-pub enum CassResultIterator {
+pub enum CassResultIterator<'result> {
     NonRows,
-    Rows(CassRowsResultIterator),
+    Rows(CassRowsResultIterator<'result>),
 }
 
-pub struct CassRowIterator {
-    row: &'static CassRow,
+pub struct CassRowIterator<'result> {
+    row: &'result CassRow<'result>,
     position: Option<usize>,
 }
 
@@ -363,9 +374,9 @@ pub struct CassViewMetaIterator {
     position: Option<usize>,
 }
 
-pub enum CassIterator {
-    CassResultIterator(CassResultIterator),
-    CassRowIterator(CassRowIterator),
+pub enum CassIterator<'result> {
+    CassResultIterator(CassResultIterator<'result>),
+    CassRowIterator(CassRowIterator<'result>),
     CassCollectionIterator(CassCollectionIterator),
     CassMapIterator(CassMapIterator),
     CassUdtIterator(CassUdtIterator),
@@ -377,7 +388,7 @@ pub enum CassIterator {
     CassViewMetaIterator(CassViewMetaIterator),
 }
 
-impl FFI for CassIterator {
+impl FFI for CassIterator<'_> {
     type Ownership = OwnershipExclusive;
 }
 
@@ -404,7 +415,7 @@ pub unsafe extern "C" fn cass_iterator_next(
                 .next()
                 .and_then(Result::ok)
                 .map(|row| {
-                    CassRow::from_row_and_metadata(row, &rows_result_iterator.result_metadata)
+                    CassRow::from_row_and_metadata(row, rows_result_iterator.result_metadata)
                 });
 
             rows_result_iterator.current_row = new_row;
@@ -862,17 +873,17 @@ pub unsafe extern "C" fn cass_iterator_get_materialized_view_meta(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_iterator_from_result(
+pub unsafe extern "C" fn cass_iterator_from_result<'result>(
     result: CassSharedPtr<CassResult>,
-) -> CassExclusiveMutPtr<CassIterator> {
-    let result_from_raw = ArcFFI::as_ref(result).unwrap();
+) -> CassExclusiveMutPtr<CassIterator<'result>> {
+    let result_from_raw = ArcFFI::into_ref(result).unwrap();
 
     let iterator = match &result_from_raw.kind {
         CassResultKind::NonRows => CassResultIterator::NonRows,
         CassResultKind::Rows(cass_rows_result) => {
             CassResultIterator::Rows(CassRowsResultIterator {
                 iterator: cass_rows_result.raw_rows.rows_iter().unwrap(),
-                result_metadata: Arc::clone(&cass_rows_result.metadata),
+                result_metadata: &cass_rows_result.metadata,
                 current_row: None,
             })
         }
@@ -882,9 +893,10 @@ pub unsafe extern "C" fn cass_iterator_from_result(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_iterator_from_row(
-    row: CassBorrowedPtr<CassRow>,
-) -> CassExclusiveMutPtr<CassIterator> {
+#[allow(clippy::needless_lifetimes)]
+pub unsafe extern "C" fn cass_iterator_from_row<'result>(
+    row: CassBorrowedPtr<CassRow<'result>>,
+) -> CassExclusiveMutPtr<CassIterator<'result>> {
     let row_from_raw = RefFFI::into_ref(row).unwrap();
 
     let iterator = CassRowIterator {
@@ -898,7 +910,7 @@ pub unsafe extern "C" fn cass_iterator_from_row(
 #[no_mangle]
 pub unsafe extern "C" fn cass_iterator_from_collection(
     value: CassBorrowedPtr<CassValue>,
-) -> CassExclusiveMutPtr<CassIterator> {
+) -> CassExclusiveMutPtr<CassIterator<'static>> {
     let is_collection = value_is_collection(&value) != 0;
 
     if RefFFI::is_null(&value) || !is_collection {
@@ -924,7 +936,7 @@ pub unsafe extern "C" fn cass_iterator_from_collection(
 #[no_mangle]
 pub unsafe extern "C" fn cass_iterator_from_tuple(
     value: CassBorrowedPtr<CassValue>,
-) -> CassExclusiveMutPtr<CassIterator> {
+) -> CassExclusiveMutPtr<CassIterator<'static>> {
     let tuple = RefFFI::into_ref(value).unwrap();
 
     if let Some(Value::CollectionValue(Collection::Tuple(val))) = &tuple.value {
@@ -944,7 +956,7 @@ pub unsafe extern "C" fn cass_iterator_from_tuple(
 #[no_mangle]
 pub unsafe extern "C" fn cass_iterator_from_map(
     value: CassBorrowedPtr<CassValue>,
-) -> CassExclusiveMutPtr<CassIterator> {
+) -> CassExclusiveMutPtr<CassIterator<'static>> {
     let map = RefFFI::into_ref(value).unwrap();
 
     if let Some(Value::CollectionValue(Collection::Map(val))) = &map.value {
@@ -964,7 +976,7 @@ pub unsafe extern "C" fn cass_iterator_from_map(
 #[no_mangle]
 pub unsafe extern "C" fn cass_iterator_fields_from_user_type(
     value: CassBorrowedPtr<CassValue>,
-) -> CassExclusiveMutPtr<CassIterator> {
+) -> CassExclusiveMutPtr<CassIterator<'static>> {
     let udt = RefFFI::into_ref(value).unwrap();
 
     if let Some(Value::CollectionValue(Collection::UserDefinedType { fields, .. })) = &udt.value {
@@ -984,7 +996,7 @@ pub unsafe extern "C" fn cass_iterator_fields_from_user_type(
 #[no_mangle]
 pub unsafe extern "C" fn cass_iterator_keyspaces_from_schema_meta(
     schema_meta: CassExclusiveConstPtr<CassSchemaMeta>,
-) -> CassExclusiveMutPtr<CassIterator> {
+) -> CassExclusiveMutPtr<CassIterator<'static>> {
     let metadata = BoxFFI::into_ref(schema_meta).unwrap();
 
     let iterator = CassSchemaMetaIterator {
@@ -999,7 +1011,7 @@ pub unsafe extern "C" fn cass_iterator_keyspaces_from_schema_meta(
 #[no_mangle]
 pub unsafe extern "C" fn cass_iterator_tables_from_keyspace_meta(
     keyspace_meta: CassBorrowedPtr<CassKeyspaceMeta>,
-) -> CassExclusiveMutPtr<CassIterator> {
+) -> CassExclusiveMutPtr<CassIterator<'static>> {
     let metadata = RefFFI::into_ref(keyspace_meta).unwrap();
 
     let iterator = CassKeyspaceMetaIterator {
@@ -1016,7 +1028,7 @@ pub unsafe extern "C" fn cass_iterator_tables_from_keyspace_meta(
 #[no_mangle]
 pub unsafe extern "C" fn cass_iterator_materialized_views_from_keyspace_meta(
     keyspace_meta: CassBorrowedPtr<CassKeyspaceMeta>,
-) -> CassExclusiveMutPtr<CassIterator> {
+) -> CassExclusiveMutPtr<CassIterator<'static>> {
     let metadata = RefFFI::into_ref(keyspace_meta).unwrap();
 
     let iterator = CassKeyspaceMetaIterator {
@@ -1033,7 +1045,7 @@ pub unsafe extern "C" fn cass_iterator_materialized_views_from_keyspace_meta(
 #[no_mangle]
 pub unsafe extern "C" fn cass_iterator_user_types_from_keyspace_meta(
     keyspace_meta: CassBorrowedPtr<CassKeyspaceMeta>,
-) -> CassExclusiveMutPtr<CassIterator> {
+) -> CassExclusiveMutPtr<CassIterator<'static>> {
     let metadata = RefFFI::into_ref(keyspace_meta).unwrap();
 
     let iterator = CassKeyspaceMetaIterator {
@@ -1050,7 +1062,7 @@ pub unsafe extern "C" fn cass_iterator_user_types_from_keyspace_meta(
 #[no_mangle]
 pub unsafe extern "C" fn cass_iterator_columns_from_table_meta(
     table_meta: CassBorrowedPtr<CassTableMeta>,
-) -> CassExclusiveMutPtr<CassIterator> {
+) -> CassExclusiveMutPtr<CassIterator<'static>> {
     let metadata = RefFFI::into_ref(table_meta).unwrap();
 
     let iterator = CassTableMetaIterator {
@@ -1064,7 +1076,7 @@ pub unsafe extern "C" fn cass_iterator_columns_from_table_meta(
 
 pub unsafe extern "C" fn cass_iterator_materialized_views_from_table_meta(
     table_meta: CassBorrowedPtr<CassTableMeta>,
-) -> CassExclusiveMutPtr<CassIterator> {
+) -> CassExclusiveMutPtr<CassIterator<'static>> {
     let metadata = RefFFI::into_ref(table_meta).unwrap();
 
     let iterator = CassTableMetaIterator {
@@ -1078,7 +1090,7 @@ pub unsafe extern "C" fn cass_iterator_materialized_views_from_table_meta(
 
 pub unsafe extern "C" fn cass_iterator_columns_from_materialized_view_meta(
     view_meta: CassBorrowedPtr<CassMaterializedViewMeta>,
-) -> CassExclusiveMutPtr<CassIterator> {
+) -> CassExclusiveMutPtr<CassIterator<'static>> {
     let metadata = RefFFI::into_ref(view_meta).unwrap();
 
     let iterator = CassViewMetaIterator {
@@ -1623,7 +1635,7 @@ pub unsafe extern "C" fn cass_result_column_count(result_raw: CassSharedPtr<Cass
 #[no_mangle]
 pub unsafe extern "C" fn cass_result_first_row(
     result_raw: CassSharedPtr<CassResult>,
-) -> CassBorrowedPtr<CassRow> {
+) -> CassBorrowedPtr<CassRow<'static>> {
     let result = ArcFFI::as_ref(&result_raw).unwrap();
 
     let CassResultKind::Rows(CassRowsResult { first_row, .. }) = &result.kind else {
@@ -1711,20 +1723,24 @@ mod tests {
             ),
         ]));
 
-        let first_row = Some(CassRow::from_row_and_metadata(
-            Row {
-                columns: vec![
-                    Some(CqlValue::BigInt(42)),
-                    None,
-                    Some(CqlValue::List(vec![
-                        CqlValue::Float(0.5),
-                        CqlValue::Float(42.42),
-                        CqlValue::Float(9999.9999),
-                    ])),
-                ],
-            },
-            &metadata,
-        ));
+        let first_row = unsafe {
+            Some(std::mem::transmute::<CassRow<'_>, CassRow<'static>>(
+                CassRow::from_row_and_metadata(
+                    Row {
+                        columns: vec![
+                            Some(CqlValue::BigInt(42)),
+                            None,
+                            Some(CqlValue::List(vec![
+                                CqlValue::Float(0.5),
+                                CqlValue::Float(42.42),
+                                CqlValue::Float(9999.9999),
+                            ])),
+                        ],
+                    },
+                    &metadata,
+                ),
+            ))
+        };
 
         CassResult {
             tracing_id: None,
