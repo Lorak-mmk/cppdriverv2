@@ -1,7 +1,9 @@
 use crate::types::size_t;
 use std::cmp::min;
 use std::ffi::CStr;
+use std::marker::PhantomData;
 use std::os::raw::c_char;
+use std::ptr::NonNull;
 use std::sync::Arc;
 
 pub unsafe fn ptr_to_cstr(ptr: *const c_char) -> Option<&'static str> {
@@ -70,6 +72,209 @@ macro_rules! make_c_str {
 
 #[cfg(test)]
 pub(crate) use make_c_str;
+
+mod sealed {
+    pub trait Sealed {}
+}
+
+/// A trait representing mutability of the pointer.
+///
+/// Pointer can either be [`Const`] or [`Mut`].
+///
+/// ## Const pointers
+/// Const pointers can only be converted to **immutable** Rust referential types.
+/// There is no way to obtain a mutable reference from such pointer.
+///
+/// In some cases, we need to be able to mutate the data behind a shared pointer.
+/// There is an example of such use case - namely [`crate::cass_types::CassDataType`].
+/// argconv API does not provide a way to mutate such pointer - one can only convert the pointer
+/// to [`Arc`] or &. It is the API user's responsibility to implement sound interior mutability
+/// pattern in such case. This is what we currently do - CassDataType wraps CassDataTypeInner
+/// inside an `UnsafeCell` to implement interior mutability for the type.
+/// Other example is [`crate::future::CassFuture`] which uses Mutex.
+///
+/// ## Mut pointers
+/// Mut pointers can be converted to both immutable and mutable Rust referential types.
+pub trait Mutability: sealed::Sealed {}
+
+/// Represents immutable pointer.
+pub struct Const;
+impl sealed::Sealed for Const {}
+impl Mutability for Const {}
+
+/// Represents mutable pointer.
+pub struct Mut;
+impl sealed::Sealed for Mut {}
+impl Mutability for Mut {}
+
+/// Represents additional properties of the pointer.
+pub trait Properties: sealed::Sealed {
+    type Mutability: Mutability;
+}
+
+impl<M: Mutability> sealed::Sealed for (M,) {}
+impl<M: Mutability> Properties for (M,) {
+    type Mutability = M;
+}
+
+/// Represents a valid non-dangling pointer.
+///
+/// ## Safety and validity guarantees
+/// Apart from trivial constructors such as [`CassPtr::null()`] and [`CassPtr::null_mut()`], there
+/// is only one way to construct a [`CassPtr`] instance - from raw pointer via [`CassPtr::from_raw()`].
+/// This constructor is `unsafe`. It is user's responsibility to ensure that the raw pointer
+/// provided to the constructor is **valid**. In other words, the pointer comes from some valid
+/// allocation, or from some valid reference.
+///
+/// ## Generic lifetime and aliasing guarantees
+/// We distinguish two types of pointers: immutable ([`Const`]) and mutable ([`Mut`]).
+/// Immutable pointers can be converted to immutable (&) references, while mutable pointers
+/// can be converted to either immutable (&) or mutable (&mut) reference. User needs to pick
+/// the correct mutability property of the pointer during construction. This is yet another
+/// reason why [`CassPtr::from_raw`] is `unsafe`.
+///
+/// Pointer is parameterized by the lifetime. Thanks to that, we can represent
+/// the `Ownership` of the pointer. Once again, user is responsible for "picking"
+/// the correct lifetime when creating the pointer. For example, when raw pointer
+/// comes from [`Box::into_raw()`], user could create a [`CassPtr<'static, T, (Mut,)>`].
+/// `'static` lifetime represents that user is the exclusive **owner** of the pointee, and
+/// is responsible for freeing the memory (e.g. via [`Box::from_raw()`]).
+/// On the other hand, when pointer is created from some immutable reference `&'a T`,
+/// the correct choice of CassPtr would be [`CassPtr<'a, T, (Const,)>`]. It means that
+/// holder of the created pointer **borrows** the pointee (with some lifetime `'a`
+/// inherited from the immutable borrow `&'a T`).
+///
+/// Both [`CassPtr::as_ref()`] and [`CassPtr::as_mut_ref()`] consume the pointer.
+/// At first glance, it seems impossible to obtain multiple immutable reference from one pointer.
+/// This is why pointer reborrowing mechanism is introduced. There are two methods: [`CassPtr::borrow()`]
+/// and [`CassPtr::borrow_mut()`]. Both of them cooperate with borrow checker and enforce
+/// aliasing XOR mutability principle at compile time.
+///
+/// ## Safe conversions to referential types
+/// Thanks to the above guarantees, conversions to referential types are **safe**.
+/// See methods [`CassPtr::as_ref()`] and [`CassPtr::as_mut_ref()`].
+///
+/// ## Memory layout
+/// We use repr(transparent), so the struct has the same layout as underlying [`Option<NonNull<T>>`].
+/// Thanks to https://doc.rust-lang.org/std/option/#representation optimization,
+/// we are guaranteed, that for `T: Sized`, our struct has the same layout
+/// and function call ABI as simply [`NonNull<T>`].
+#[repr(transparent)]
+pub struct CassPtr<'a, T: Sized, P: Properties> {
+    ptr: Option<NonNull<T>>,
+    _phantom: PhantomData<&'a P>,
+}
+
+/// Owned immutable pointer.
+/// Can be used for pointers with shared ownership - e.g. pointers coming from [`Arc`] allocation.
+pub type CassOwnedPtr<T> = CassPtr<'static, T, (Const,)>;
+
+/// Borrowed immutable pointer.
+/// Can be used for pointers created from some immutable reference.
+pub type CassBorrowedPtr<'a, T> = CassPtr<'a, T, (Const,)>;
+
+/// Owned mutable pointer.
+/// Can be used for pointers with exclusive ownership - e.g. pointers coming from [`Box`] allocation.
+pub type CassOwnedMutPtr<T> = CassPtr<'static, T, (Mut,)>;
+
+/// Borrowed mutable pointer.
+/// This can be for example obtained from mutable reborrow of some [`CassOwnedMutPtr`].
+pub type CassBorrowedMutPtr<'a, T> = CassPtr<'a, T, (Mut,)>;
+
+/// Pointer constructors.
+impl<T: Sized, P: Properties> CassPtr<'_, T, P> {
+    fn null() -> Self {
+        CassPtr {
+            ptr: None,
+            _phantom: PhantomData,
+        }
+    }
+
+    fn is_null(&self) -> bool {
+        self.ptr.is_none()
+    }
+
+    /// Constructs [`CassPtr`] from raw pointer.
+    ///
+    /// ## Safety
+    /// User needs to ensure that the pointer is **valid**.
+    /// User is also responsible for picking correct mutability property and lifetime
+    /// of the created pointer. For more information, see the documentation of [`CassPtr`].
+    unsafe fn from_raw(raw: *const T) -> Self {
+        CassPtr {
+            ptr: NonNull::new(raw as *mut T),
+            _phantom: PhantomData,
+        }
+    }
+}
+
+/// Conversion to raw pointer.
+impl<T: Sized, P: Properties> CassPtr<'_, T, P> {
+    fn to_raw(&self) -> Option<*mut T> {
+        self.ptr.map(|ptr| ptr.as_ptr())
+    }
+}
+
+/// Constructors exclusive to mutable pointers.
+impl<T: Sized> CassPtr<'_, T, (Mut,)> {
+    fn null_mut() -> Self {
+        CassPtr {
+            ptr: None,
+            _phantom: PhantomData,
+        }
+    }
+}
+
+impl<'a, T: Sized, P: Properties> CassPtr<'a, T, P> {
+    /// Converts a pointer to an optional valid reference.
+    /// The reference inherits the lifetime of the pointer.
+    #[allow(clippy::wrong_self_convention)]
+    fn as_ref(self) -> Option<&'a T> {
+        // SAFETY: Thanks to the validity and aliasing ^ mutability guarantees,
+        // we can safely convert the pointer to valid immutable reference with
+        // correct lifetime.
+        unsafe { self.ptr.map(|p| p.as_ref()) }
+    }
+}
+
+impl<'a, T: Sized> CassPtr<'a, T, (Mut,)> {
+    /// Converts a pointer to an optional valid mutable reference.
+    /// The reference inherits the lifetime of the pointer.
+    #[allow(clippy::wrong_self_convention)]
+    fn as_mut_ref(self) -> Option<&'a mut T> {
+        // SAFETY: Thanks to the validity and aliasing ^ mutability guarantees,
+        // we can safely convert the pointer to valid mutable (and exclusive) reference with
+        // correct lifetime.
+        unsafe { self.ptr.map(|mut p| p.as_mut()) }
+    }
+}
+
+impl<T: Sized, P: Properties> CassPtr<'_, T, P> {
+    /// Immutably reborrows the pointer.
+    /// Resulting pointer inherits the lifetime from the immutable borrow
+    /// of original pointer.
+    #[allow(clippy::needless_lifetimes)]
+    pub fn borrow<'a>(&'a self) -> CassPtr<'a, T, (Const,)> {
+        CassPtr {
+            ptr: self.ptr,
+            _phantom: PhantomData,
+        }
+    }
+}
+
+impl<T: Sized> CassPtr<'_, T, (Mut,)> {
+    /// Mutably reborrows the pointer.
+    /// Resulting pointer inherits the lifetime from the mutable borrow
+    /// of original pointer. Since the method accepts a mutable reference
+    /// to the original pointer, we enforce aliasing ^ mutability principle at compile time.
+    #[allow(clippy::needless_lifetimes)]
+    pub fn borrow_mut<'a>(&'a mut self) -> CassPtr<'a, T, (Mut,)> {
+        CassPtr {
+            ptr: self.ptr,
+            _phantom: PhantomData,
+        }
+    }
+}
 
 /// Defines a pointer manipulation API for non-shared heap-allocated data.
 ///
