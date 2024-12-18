@@ -301,73 +301,73 @@ fn get_column_value(column: CqlValue, column_type: &Arc<CassDataType>) -> Value 
     }
 }
 
-pub struct CassResultIterator {
-    result: &'static CassResult,
+pub struct CassResultIterator<'result> {
+    result: &'result CassResult,
     position: Option<usize>,
 }
 
-pub struct CassRowIterator {
-    row: &'static CassRow,
+pub struct CassRowIterator<'result> {
+    row: &'result CassRow,
     position: Option<usize>,
 }
 
-pub struct CassCollectionIterator {
-    value: &'static CassValue,
+pub struct CassCollectionIterator<'result> {
+    value: &'result CassValue,
     count: u64,
     position: Option<usize>,
 }
 
-pub struct CassMapIterator {
-    value: &'static CassValue,
+pub struct CassMapIterator<'result> {
+    value: &'result CassValue,
     count: u64,
     position: Option<usize>,
 }
 
-pub struct CassUdtIterator {
-    value: &'static CassValue,
+pub struct CassUdtIterator<'result> {
+    value: &'result CassValue,
     count: u64,
     position: Option<usize>,
 }
 
-pub struct CassSchemaMetaIterator {
-    value: &'static CassSchemaMeta,
+pub struct CassSchemaMetaIterator<'schema> {
+    value: &'schema CassSchemaMeta,
     count: usize,
     position: Option<usize>,
 }
 
-pub struct CassKeyspaceMetaIterator {
-    value: &'static CassKeyspaceMeta,
+pub struct CassKeyspaceMetaIterator<'schema> {
+    value: &'schema CassKeyspaceMeta,
     count: usize,
     position: Option<usize>,
 }
 
-pub struct CassTableMetaIterator {
-    value: &'static CassTableMeta,
+pub struct CassTableMetaIterator<'schema> {
+    value: &'schema CassTableMeta,
     count: usize,
     position: Option<usize>,
 }
 
-pub struct CassViewMetaIterator {
-    value: &'static CassMaterializedViewMeta,
+pub struct CassViewMetaIterator<'schema> {
+    value: &'schema CassMaterializedViewMeta,
     count: usize,
     position: Option<usize>,
 }
 
-pub enum CassIterator {
-    CassResultIterator(CassResultIterator),
-    CassRowIterator(CassRowIterator),
-    CassCollectionIterator(CassCollectionIterator),
-    CassMapIterator(CassMapIterator),
-    CassUdtIterator(CassUdtIterator),
-    CassSchemaMetaIterator(CassSchemaMetaIterator),
-    CassKeyspaceMetaTableIterator(CassKeyspaceMetaIterator),
-    CassKeyspaceMetaUserTypeIterator(CassKeyspaceMetaIterator),
-    CassKeyspaceMetaViewIterator(CassKeyspaceMetaIterator),
-    CassTableMetaIterator(CassTableMetaIterator),
-    CassViewMetaIterator(CassViewMetaIterator),
+pub enum CassIterator<'result_or_schema> {
+    CassResultIterator(CassResultIterator<'result_or_schema>),
+    CassRowIterator(CassRowIterator<'result_or_schema>),
+    CassCollectionIterator(CassCollectionIterator<'result_or_schema>),
+    CassMapIterator(CassMapIterator<'result_or_schema>),
+    CassUdtIterator(CassUdtIterator<'result_or_schema>),
+    CassSchemaMetaIterator(CassSchemaMetaIterator<'result_or_schema>),
+    CassKeyspaceMetaTableIterator(CassKeyspaceMetaIterator<'result_or_schema>),
+    CassKeyspaceMetaUserTypeIterator(CassKeyspaceMetaIterator<'result_or_schema>),
+    CassKeyspaceMetaViewIterator(CassKeyspaceMetaIterator<'result_or_schema>),
+    CassTableMetaIterator(CassTableMetaIterator<'result_or_schema>),
+    CassViewMetaIterator(CassViewMetaIterator<'result_or_schema>),
 }
 
-impl BoxFFI for CassIterator {}
+impl BoxFFI for CassIterator<'_> {}
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_iterator_free(iterator: *mut CassIterator) {
@@ -847,7 +847,9 @@ pub unsafe extern "C" fn cass_iterator_get_materialized_view_meta(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_iterator_from_result(result: *const CassResult) -> *mut CassIterator {
+pub unsafe extern "C" fn cass_iterator_from_result<'result>(
+    result: *const CassResult,
+) -> *mut CassIterator<'result> {
     let result_from_raw = ArcFFI::as_ref(result);
 
     let iterator = CassResultIterator {
@@ -859,7 +861,9 @@ pub unsafe extern "C" fn cass_iterator_from_result(result: *const CassResult) ->
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_iterator_from_row(row: *const CassRow) -> *mut CassIterator {
+pub unsafe extern "C" fn cass_iterator_from_row<'result>(
+    row: *const CassRow,
+) -> *mut CassIterator<'result> {
     let row_from_raw = RefFFI::as_ref(row);
 
     let iterator = CassRowIterator {
@@ -871,9 +875,9 @@ pub unsafe extern "C" fn cass_iterator_from_row(row: *const CassRow) -> *mut Cas
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_iterator_from_collection(
+pub unsafe extern "C" fn cass_iterator_from_collection<'result>(
     value: *const CassValue,
-) -> *mut CassIterator {
+) -> *mut CassIterator<'result> {
     let is_collection = cass_value_is_collection(value) != 0;
 
     if value.is_null() || !is_collection {
@@ -897,7 +901,9 @@ pub unsafe extern "C" fn cass_iterator_from_collection(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_iterator_from_tuple(value: *const CassValue) -> *mut CassIterator {
+pub unsafe extern "C" fn cass_iterator_from_tuple<'result>(
+    value: *const CassValue,
+) -> *mut CassIterator<'result> {
     let tuple = RefFFI::as_ref(value);
 
     if let Some(Value::CollectionValue(Collection::Tuple(val))) = &tuple.value {
@@ -915,7 +921,9 @@ pub unsafe extern "C" fn cass_iterator_from_tuple(value: *const CassValue) -> *m
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_iterator_from_map(value: *const CassValue) -> *mut CassIterator {
+pub unsafe extern "C" fn cass_iterator_from_map<'result>(
+    value: *const CassValue,
+) -> *mut CassIterator<'result> {
     let map = RefFFI::as_ref(value);
 
     if let Some(Value::CollectionValue(Collection::Map(val))) = &map.value {
@@ -933,9 +941,9 @@ pub unsafe extern "C" fn cass_iterator_from_map(value: *const CassValue) -> *mut
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_iterator_fields_from_user_type(
+pub unsafe extern "C" fn cass_iterator_fields_from_user_type<'result>(
     value: *const CassValue,
-) -> *mut CassIterator {
+) -> *mut CassIterator<'result> {
     let udt = RefFFI::as_ref(value);
 
     if let Some(Value::CollectionValue(Collection::UserDefinedType { fields, .. })) = &udt.value {
@@ -953,9 +961,9 @@ pub unsafe extern "C" fn cass_iterator_fields_from_user_type(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_iterator_keyspaces_from_schema_meta(
+pub unsafe extern "C" fn cass_iterator_keyspaces_from_schema_meta<'schema>(
     schema_meta: *const CassSchemaMeta,
-) -> *mut CassIterator {
+) -> *mut CassIterator<'schema> {
     let metadata = BoxFFI::as_ref(schema_meta);
 
     let iterator = CassSchemaMetaIterator {
@@ -968,9 +976,9 @@ pub unsafe extern "C" fn cass_iterator_keyspaces_from_schema_meta(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_iterator_tables_from_keyspace_meta(
+pub unsafe extern "C" fn cass_iterator_tables_from_keyspace_meta<'schema>(
     keyspace_meta: *const CassKeyspaceMeta,
-) -> *mut CassIterator {
+) -> *mut CassIterator<'schema> {
     let metadata = RefFFI::as_ref(keyspace_meta);
 
     let iterator = CassKeyspaceMetaIterator {
@@ -985,9 +993,9 @@ pub unsafe extern "C" fn cass_iterator_tables_from_keyspace_meta(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_iterator_materialized_views_from_keyspace_meta(
+pub unsafe extern "C" fn cass_iterator_materialized_views_from_keyspace_meta<'schema>(
     keyspace_meta: *const CassKeyspaceMeta,
-) -> *mut CassIterator {
+) -> *mut CassIterator<'schema> {
     let metadata = RefFFI::as_ref(keyspace_meta);
 
     let iterator = CassKeyspaceMetaIterator {
@@ -1002,9 +1010,9 @@ pub unsafe extern "C" fn cass_iterator_materialized_views_from_keyspace_meta(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_iterator_user_types_from_keyspace_meta(
+pub unsafe extern "C" fn cass_iterator_user_types_from_keyspace_meta<'schema>(
     keyspace_meta: *const CassKeyspaceMeta,
-) -> *mut CassIterator {
+) -> *mut CassIterator<'schema> {
     let metadata = RefFFI::as_ref(keyspace_meta);
 
     let iterator = CassKeyspaceMetaIterator {
@@ -1019,9 +1027,9 @@ pub unsafe extern "C" fn cass_iterator_user_types_from_keyspace_meta(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_iterator_columns_from_table_meta(
+pub unsafe extern "C" fn cass_iterator_columns_from_table_meta<'schema>(
     table_meta: *const CassTableMeta,
-) -> *mut CassIterator {
+) -> *mut CassIterator<'schema> {
     let metadata = RefFFI::as_ref(table_meta);
 
     let iterator = CassTableMetaIterator {
@@ -1033,9 +1041,9 @@ pub unsafe extern "C" fn cass_iterator_columns_from_table_meta(
     BoxFFI::into_ptr(Box::new(CassIterator::CassTableMetaIterator(iterator)))
 }
 
-pub unsafe extern "C" fn cass_iterator_materialized_views_from_table_meta(
+pub unsafe extern "C" fn cass_iterator_materialized_views_from_table_meta<'schema>(
     table_meta: *const CassTableMeta,
-) -> *mut CassIterator {
+) -> *mut CassIterator<'schema> {
     let metadata = RefFFI::as_ref(table_meta);
 
     let iterator = CassTableMetaIterator {
@@ -1047,9 +1055,9 @@ pub unsafe extern "C" fn cass_iterator_materialized_views_from_table_meta(
     BoxFFI::into_ptr(Box::new(CassIterator::CassTableMetaIterator(iterator)))
 }
 
-pub unsafe extern "C" fn cass_iterator_columns_from_materialized_view_meta(
+pub unsafe extern "C" fn cass_iterator_columns_from_materialized_view_meta<'schema>(
     view_meta: *const CassMaterializedViewMeta,
-) -> *mut CassIterator {
+) -> *mut CassIterator<'schema> {
     let metadata = RefFFI::as_ref(view_meta);
 
     let iterator = CassViewMetaIterator {
