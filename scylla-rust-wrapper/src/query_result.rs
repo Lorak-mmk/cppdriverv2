@@ -302,7 +302,7 @@ fn get_column_value(column: CqlValue, column_type: &Arc<CassDataType>) -> Value 
 }
 
 pub struct CassResultIterator {
-    result: Arc<CassResult>,
+    result: &'static CassResult,
     position: Option<usize>,
 }
 
@@ -848,7 +848,7 @@ pub unsafe extern "C" fn cass_iterator_get_materialized_view_meta(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_iterator_from_result(result: *const CassResult) -> *mut CassIterator {
-    let result_from_raw = ArcFFI::cloned_from_ptr(result);
+    let result_from_raw = ArcFFI::as_ref(result);
 
     let iterator = CassResultIterator {
         result: result_from_raw,
