@@ -39,7 +39,7 @@ ntest = "0.9.3"
 rusty-fork = "0.3.0"
 [lib]
 name = "scylla_cpp_driver"
-crate-type = ["cdylib", "staticlib"]
+crate-type = ["cdylib", "staticlib", "lib"]
 
 [profile.dev]
 panic = "abort"

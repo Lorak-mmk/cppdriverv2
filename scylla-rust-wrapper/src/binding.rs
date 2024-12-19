@@ -371,13 +371,13 @@ macro_rules! invoke_binder_maker_macro_with_type {
 ///         There are also 2 helper variants, to accomodate scenarios often encountered in cppdriver (sets of 3 functions,
 ///         binding the same type by index, name and name_n):
 ///  * `make_binders!(type, fn_idx, fn_name, fn_name_n)` - is equivalent to:
-///     ```
+///     ```text
 ///     make_binders!(@index type, fn_idx);
 ///     make_binders!(@name type, fn_name);
 ///     make_binders!(@name_n type, fn_name_n);
 ///     ```
 ///  * `make_binders!(t1, fn_idx, t2, fn_name, t3, fn_name_n)` - is equivalent to:
-///     ```
+///     ```text
 ///     make_binders!(@index t1, fn_idx);
 ///     make_binders!(@name t2, fn_name);
 ///     make_binders!(@name_n t3, fn_name_n);
