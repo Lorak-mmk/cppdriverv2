@@ -53,7 +53,7 @@ macro_rules! make_index_binder {
         #[no_mangle]
         #[allow(clippy::redundant_closure_call)]
         pub unsafe extern "C" fn $fn_by_idx(
-            this: *mut $this,
+            this: CassBorrowedMutPtr<$this>,
             index: size_t,
             $($arg: $t), *
         ) -> CassError {
@@ -61,7 +61,7 @@ macro_rules! make_index_binder {
             #[allow(unused_imports)]
             use crate::value::CassCqlValue::*;
             match ($e)($($arg), *) {
-                Ok(v) => $consume_v(BoxFFI::as_mut_ref(this), index as usize, v),
+                Ok(v) => $consume_v(BoxFFI::as_mut_ref( this).unwrap(), index as usize, v),
                 Err(e) => e,
             }
         }
@@ -73,7 +73,7 @@ macro_rules! make_name_binder {
         #[no_mangle]
         #[allow(clippy::redundant_closure_call)]
         pub unsafe extern "C" fn $fn_by_name(
-            this: *mut $this,
+            this: CassBorrowedMutPtr<$this>,
             name: *const c_char,
             $($arg: $t), *
         ) -> CassError {
@@ -82,7 +82,7 @@ macro_rules! make_name_binder {
             use crate::value::CassCqlValue::*;
             let name = ptr_to_cstr(name).unwrap();
             match ($e)($($arg), *) {
-                Ok(v) => $consume_v(BoxFFI::as_mut_ref(this), name, v),
+                Ok(v) => $consume_v(BoxFFI::as_mut_ref( this).unwrap(), name, v),
                 Err(e) => e,
             }
         }
@@ -94,7 +94,7 @@ macro_rules! make_name_n_binder {
         #[no_mangle]
         #[allow(clippy::redundant_closure_call)]
         pub unsafe extern "C" fn $fn_by_name_n(
-            this: *mut $this,
+            this: CassBorrowedMutPtr<$this>,
             name: *const c_char,
             name_length: size_t,
             $($arg: $t), *
@@ -104,7 +104,7 @@ macro_rules! make_name_n_binder {
             use crate::value::CassCqlValue::*;
             let name = ptr_to_cstr_n(name, name_length).unwrap();
             match ($e)($($arg), *) {
-                Ok(v) => $consume_v(BoxFFI::as_mut_ref(this), name, v),
+                Ok(v) => $consume_v(BoxFFI::as_mut_ref( this).unwrap(), name, v),
                 Err(e) => e,
             }
         }
@@ -116,14 +116,14 @@ macro_rules! make_appender {
         #[no_mangle]
         #[allow(clippy::redundant_closure_call)]
         pub unsafe extern "C" fn $fn_append(
-            this: *mut $this,
+            this: CassBorrowedMutPtr<$this>,
             $($arg: $t), *
         ) -> CassError {
             // For some reason detected as unused, which is not true
             #[allow(unused_imports)]
             use crate::value::CassCqlValue::*;
             match ($e)($($arg), *) {
-                Ok(v) => $consume_v(BoxFFI::as_mut_ref(this), v),
+                Ok(v) => $consume_v(BoxFFI::as_mut_ref( this).unwrap(), v),
                 Err(e) => e,
             }
         }
@@ -302,13 +302,13 @@ macro_rules! invoke_binder_maker_macro_with_type {
             $this,
             $consume_v,
             $fn,
-            |p: *const crate::collection::CassCollection| {
-                match std::convert::TryInto::try_into(BoxFFI::as_ref(p)) {
+            |p: CassBorrowedPtr<crate::collection::CassCollection>| {
+                match std::convert::TryInto::try_into(BoxFFI::as_ref(p).unwrap()) {
                     Ok(v) => Ok(Some(v)),
                     Err(_) => Err(CassError::CASS_ERROR_LIB_INVALID_VALUE_TYPE),
                 }
             },
-            [p @ *const crate::collection::CassCollection]
+            [p @ CassBorrowedPtr<crate::collection::CassCollection>]
         );
     };
     (tuple, $macro_name:ident, $this:ty, $consume_v:expr, $fn:ident) => {
@@ -316,10 +316,10 @@ macro_rules! invoke_binder_maker_macro_with_type {
             $this,
             $consume_v,
             $fn,
-            |p: *const crate::tuple::CassTuple| {
-                Ok(Some(BoxFFI::as_ref(p).into()))
+            |p: CassBorrowedPtr<crate::tuple::CassTuple>| {
+                Ok(Some(BoxFFI::as_ref(p).unwrap().into()))
             },
-            [p @ *const crate::tuple::CassTuple]
+            [p @ CassBorrowedPtr<crate::tuple::CassTuple>]
         );
     };
     (user_type, $macro_name:ident, $this:ty, $consume_v:expr, $fn:ident) => {
@@ -327,8 +327,10 @@ macro_rules! invoke_binder_maker_macro_with_type {
             $this,
             $consume_v,
             $fn,
-            |p: *const crate::user_type::CassUserType| Ok(Some(BoxFFI::as_ref(p).into())),
-            [p @ *const crate::user_type::CassUserType]
+            |p: CassBorrowedPtr<crate::user_type::CassUserType>| {
+                Ok(Some(BoxFFI::as_ref(p).unwrap().into()))
+            },
+            [p @ CassBorrowedPtr<crate::user_type::CassUserType>]
         );
     };
 }
@@ -371,13 +373,13 @@ macro_rules! invoke_binder_maker_macro_with_type {
 ///         There are also 2 helper variants, to accomodate scenarios often encountered in cppdriver (sets of 3 functions,
 ///         binding the same type by index, name and name_n):
 ///  * `make_binders!(type, fn_idx, fn_name, fn_name_n)` - is equivalent to:
-///     ```
+///     ```text
 ///     make_binders!(@index type, fn_idx);
 ///     make_binders!(@name type, fn_name);
 ///     make_binders!(@name_n type, fn_name_n);
 ///     ```
 ///  * `make_binders!(t1, fn_idx, t2, fn_name, t3, fn_name_n)` - is equivalent to:
-///     ```
+///     ```text
 ///     make_binders!(@index t1, fn_idx);
 ///     make_binders!(@name t2, fn_name);
 ///     make_binders!(@name_n t3, fn_name_n);

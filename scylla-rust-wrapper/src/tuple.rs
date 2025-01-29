@@ -6,8 +6,10 @@ use crate::types::*;
 use crate::value;
 use crate::value::CassCqlValue;
 use std::sync::Arc;
+use std::sync::LazyLock;
 
-static UNTYPED_TUPLE_TYPE: CassDataType = CassDataType::new(CassDataTypeInner::Tuple(Vec::new()));
+static UNTYPED_TUPLE_TYPE: LazyLock<Arc<CassDataType>> =
+    LazyLock::new(|| CassDataType::new_arced(CassDataTypeInner::Tuple(Vec::new())));
 
 #[derive(Clone)]
 pub struct CassTuple {
@@ -15,7 +17,9 @@ pub struct CassTuple {
     pub items: Vec<Option<CassCqlValue>>,
 }
 
-impl BoxFFI for CassTuple {}
+impl FFI for CassTuple {
+    type Origin = FromBox;
+}
 
 impl CassTuple {
     fn get_types(&self) -> Option<&Vec<Arc<CassDataType>>> {
@@ -61,7 +65,7 @@ impl From<&CassTuple> for CassCqlValue {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_tuple_new(item_count: size_t) -> *mut CassTuple {
+pub unsafe extern "C" fn cass_tuple_new(item_count: size_t) -> CassOwnedMutPtr<CassTuple> {
     BoxFFI::into_ptr(Box::new(CassTuple {
         data_type: None,
         items: vec![None; item_count as usize],
@@ -70,12 +74,12 @@ pub unsafe extern "C" fn cass_tuple_new(item_count: size_t) -> *mut CassTuple {
 
 #[no_mangle]
 unsafe extern "C" fn cass_tuple_new_from_data_type(
-    data_type: *const CassDataType,
-) -> *mut CassTuple {
-    let data_type = ArcFFI::cloned_from_ptr(data_type);
+    data_type: CassBorrowedPtr<CassDataType>,
+) -> CassOwnedMutPtr<CassTuple> {
+    let data_type = ArcFFI::cloned_from_ptr(data_type).unwrap();
     let item_count = match data_type.get_unchecked() {
         CassDataTypeInner::Tuple(v) => v.len(),
-        _ => return std::ptr::null_mut(),
+        _ => return BoxFFI::null_mut(),
     };
     BoxFFI::into_ptr(Box::new(CassTuple {
         data_type: Some(data_type),
@@ -84,15 +88,17 @@ unsafe extern "C" fn cass_tuple_new_from_data_type(
 }
 
 #[no_mangle]
-unsafe extern "C" fn cass_tuple_free(tuple: *mut CassTuple) {
+unsafe extern "C" fn cass_tuple_free(tuple: CassOwnedMutPtr<CassTuple>) {
     BoxFFI::free(tuple);
 }
 
 #[no_mangle]
-unsafe extern "C" fn cass_tuple_data_type(tuple: *const CassTuple) -> *const CassDataType {
-    match &BoxFFI::as_ref(tuple).data_type {
+unsafe extern "C" fn cass_tuple_data_type(
+    tuple: CassBorrowedPtr<CassTuple>,
+) -> CassBorrowedPtr<CassDataType> {
+    match &BoxFFI::as_ref(tuple).unwrap().data_type {
         Some(t) => ArcFFI::as_ptr(t),
-        None => &UNTYPED_TUPLE_TYPE,
+        None => ArcFFI::as_ptr(&UNTYPED_TUPLE_TYPE),
     }
 }
 
@@ -116,3 +122,32 @@ make_binders!(decimal, cass_tuple_set_decimal);
 make_binders!(collection, cass_tuple_set_collection);
 make_binders!(tuple, cass_tuple_set_tuple);
 make_binders!(user_type, cass_tuple_set_user_type);
+
+#[cfg(test)]
+mod tests {
+    use crate::cass_types::{
+        cass_data_type_add_sub_type, cass_data_type_free, cass_data_type_new, CassValueType,
+    };
+
+    use super::{cass_tuple_data_type, cass_tuple_new};
+
+    #[test]
+    fn regression_empty_tuple_data_type_test() {
+        // This is a regression test that checks whether tuples return
+        // an Arc-based pointer for their type, even if they are empty.
+        // Previously, they would return the pointer to static data, but not Arc allocated.
+        unsafe {
+            let empty_tuple = cass_tuple_new(2);
+
+            // This would previously return a non Arc-based pointer.
+            let empty_tuple_dt = cass_tuple_data_type(empty_tuple.borrow());
+
+            let empty_set_dt = cass_data_type_new(CassValueType::CASS_VALUE_TYPE_SET);
+            // This will try to increment the reference count of `empty_tuple_dt`.
+            // Previously, this would fail, because `empty_tuple_dt` did not originate from an Arc allocation.
+            cass_data_type_add_sub_type(empty_set_dt.borrow(), empty_tuple_dt);
+
+            cass_data_type_free(empty_set_dt)
+        }
+    }
+}

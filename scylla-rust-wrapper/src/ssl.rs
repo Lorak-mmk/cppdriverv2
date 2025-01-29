@@ -1,4 +1,8 @@
 use crate::argconv::ArcFFI;
+use crate::argconv::CassBorrowedPtr;
+use crate::argconv::CassOwnedPtr;
+use crate::argconv::FromArc;
+use crate::argconv::FFI;
 use crate::cass_error::CassError;
 use crate::types::size_t;
 use libc::{c_int, strlen};
@@ -19,7 +23,9 @@ pub struct CassSsl {
     pub(crate) trusted_store: *mut X509_STORE,
 }
 
-impl ArcFFI for CassSsl {}
+impl FFI for CassSsl {
+    type Origin = FromArc;
+}
 
 pub const CASS_SSL_VERIFY_NONE: i32 = 0x00;
 pub const CASS_SSL_VERIFY_PEER_CERT: i32 = 0x01;
@@ -27,13 +33,13 @@ pub const CASS_SSL_VERIFY_PEER_IDENTITY: i32 = 0x02;
 pub const CASS_SSL_VERIFY_PEER_IDENTITY_DNS: i32 = 0x04;
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_ssl_new() -> *const CassSsl {
+pub unsafe extern "C" fn cass_ssl_new() -> CassOwnedPtr<CassSsl> {
     openssl_sys::init();
     cass_ssl_new_no_lib_init()
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_ssl_new_no_lib_init() -> *const CassSsl {
+pub unsafe extern "C" fn cass_ssl_new_no_lib_init() -> CassOwnedPtr<CassSsl> {
     let ssl_context: *mut SSL_CTX = SSL_CTX_new(TLS_method());
     let trusted_store: *mut X509_STORE = X509_STORE_new();
 
@@ -64,7 +70,7 @@ impl Drop for CassSsl {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_ssl_free(ssl: *mut CassSsl) {
+pub unsafe extern "C" fn cass_ssl_free(ssl: CassOwnedPtr<CassSsl>) {
     ArcFFI::free(ssl);
 }
 
@@ -96,7 +102,7 @@ unsafe extern "C" fn pem_password_callback(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_ssl_add_trusted_cert(
-    ssl: *mut CassSsl,
+    ssl: CassBorrowedPtr<CassSsl>,
     cert: *const c_char,
 ) -> CassError {
     if cert.is_null() {
@@ -108,11 +114,11 @@ pub unsafe extern "C" fn cass_ssl_add_trusted_cert(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_ssl_add_trusted_cert_n(
-    ssl: *mut CassSsl,
+    ssl: CassBorrowedPtr<CassSsl>,
     cert: *const c_char,
     cert_length: size_t,
 ) -> CassError {
-    let ssl = ArcFFI::cloned_from_ptr(ssl);
+    let ssl = ArcFFI::cloned_from_ptr(ssl).unwrap();
     let bio = BIO_new_mem_buf(cert as *const c_void, cert_length.try_into().unwrap());
 
     if bio.is_null() {
@@ -139,8 +145,8 @@ pub unsafe extern "C" fn cass_ssl_add_trusted_cert_n(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_ssl_set_verify_flags(ssl: *mut CassSsl, flags: i32) {
-    let ssl = ArcFFI::cloned_from_ptr(ssl);
+pub unsafe extern "C" fn cass_ssl_set_verify_flags(ssl: CassBorrowedPtr<CassSsl>, flags: i32) {
+    let ssl = ArcFFI::cloned_from_ptr(ssl).unwrap();
 
     match flags {
         CASS_SSL_VERIFY_NONE => {
@@ -164,7 +170,10 @@ pub unsafe extern "C" fn cass_ssl_set_verify_flags(ssl: *mut CassSsl, flags: i32
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_ssl_set_cert(ssl: *mut CassSsl, cert: *const c_char) -> CassError {
+pub unsafe extern "C" fn cass_ssl_set_cert(
+    ssl: CassBorrowedPtr<CassSsl>,
+    cert: *const c_char,
+) -> CassError {
     if cert.is_null() {
         return CassError::CASS_ERROR_SSL_INVALID_CERT;
     }
@@ -174,11 +183,11 @@ pub unsafe extern "C" fn cass_ssl_set_cert(ssl: *mut CassSsl, cert: *const c_cha
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_ssl_set_cert_n(
-    ssl: *mut CassSsl,
+    ssl: CassBorrowedPtr<CassSsl>,
     cert: *const c_char,
     cert_length: size_t,
 ) -> CassError {
-    let ssl = ArcFFI::cloned_from_ptr(ssl);
+    let ssl = ArcFFI::cloned_from_ptr(ssl).unwrap();
     let bio = BIO_new_mem_buf(cert as *const c_void, cert_length.try_into().unwrap());
 
     if bio.is_null() {
@@ -246,7 +255,7 @@ unsafe extern "C" fn SSL_CTX_use_certificate_chain_bio(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_ssl_set_private_key(
-    ssl: *mut CassSsl,
+    ssl: CassBorrowedPtr<CassSsl>,
     key: *const c_char,
     password: *mut c_char,
 ) -> CassError {
@@ -265,13 +274,13 @@ pub unsafe extern "C" fn cass_ssl_set_private_key(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_ssl_set_private_key_n(
-    ssl: *mut CassSsl,
+    ssl: CassBorrowedPtr<CassSsl>,
     key: *const c_char,
     key_length: size_t,
     password: *mut c_char,
     _password_length: size_t,
 ) -> CassError {
-    let ssl = ArcFFI::cloned_from_ptr(ssl);
+    let ssl = ArcFFI::cloned_from_ptr(ssl).unwrap();
     let bio = BIO_new_mem_buf(key as *const c_void, key_length.try_into().unwrap());
 
     if bio.is_null() {
