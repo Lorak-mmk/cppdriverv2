@@ -136,7 +136,7 @@ build-integration-test-bin:
 		echo "Building integration test binary to ${INTEGRATION_TEST_BIN}";\
   		mkdir "${BUILD_DIR}" >/dev/null 2>&1 || true;\
 		cd "${BUILD_DIR}";\
-		cmake -DCASS_BUILD_INTEGRATION_TESTS=ON .. && (make -j 4 || make);\
+		cmake -DCASS_BUILD_INTEGRATION_TESTS=ON -DCASS_USE_STATIC_LIBS=ON .. && (make -j 4 || make);\
 	}
 
 build-integration-test-bin-if-missing:
