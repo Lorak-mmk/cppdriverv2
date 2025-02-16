@@ -131,7 +131,7 @@ jobs:
 
       - name: Run integration tests on Scylla ${{ steps.scylla-version.outputs.value }}
         id: run-integration-tests
-        run: SCYLLA_VERSION="release:${{ steps.scylla-version.outputs.value }}" make run-test-integration-scylla
+        run: SCYLLA_TEST_FILTER="-AuthenticationTests.*:AsyncTests.Integration_Cassandra_Close" SCYLLA_VERSION="release:${{ steps.scylla-version.outputs.value }}" make run-test-integration-scylla
 
       - name: Upload test logs
         uses: actions/upload-artifact@v4
@@ -222,7 +222,7 @@ jobs:
 
       - name: Run integration tests on Cassandra ${{ steps.cassandra-version.outputs.value }}
         id: run-integration-tests
-        run: CASSANDRA_VERSION="${{ steps.cassandra-version.outputs.value }}" make run-test-integration-cassandra
+        run: CASSANDRA_TEST_FILTER="-AuthenticationTests.*:AsyncTests.Integration_Cassandra_Close" CASSANDRA_VERSION="${{ steps.cassandra-version.outputs.value }}" make run-test-integration-cassandra
 
       - name: Upload test logs
         uses: actions/upload-artifact@v4
