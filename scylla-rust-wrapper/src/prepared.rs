@@ -72,18 +72,20 @@ impl CassPrepared {
     }
 }
 
-impl ArcFFI for CassPrepared {}
+impl FFI for CassPrepared {
+    type Ownership = OwnershipShared;
+}
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_prepared_free(prepared_raw: *const CassPrepared) {
+pub unsafe extern "C" fn cass_prepared_free(prepared_raw: CassSharedPtr<CassPrepared>) {
     ArcFFI::free(prepared_raw);
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_prepared_bind(
-    prepared_raw: *const CassPrepared,
-) -> *mut CassStatement {
-    let prepared: Arc<_> = ArcFFI::cloned_from_ptr(prepared_raw);
+    prepared_raw: CassSharedPtr<CassPrepared>,
+) -> CassExclusiveMutPtr<CassStatement> {
+    let prepared: Arc<_> = ArcFFI::cloned_from_ptr(prepared_raw).unwrap();
     let bound_values_size = prepared.statement.get_variable_col_specs().len();
 
     // cloning prepared statement's arc, because creating CassStatement should not invalidate
@@ -106,12 +108,12 @@ pub unsafe extern "C" fn cass_prepared_bind(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_prepared_parameter_name(
-    prepared_raw: *const CassPrepared,
+    prepared_raw: CassSharedPtr<CassPrepared>,
     index: size_t,
     name: *mut *const c_char,
     name_length: *mut size_t,
 ) -> CassError {
-    let prepared = ArcFFI::as_ref(prepared_raw);
+    let prepared = ArcFFI::as_ref(&prepared_raw).unwrap();
 
     match prepared
         .statement
@@ -128,38 +130,38 @@ pub unsafe extern "C" fn cass_prepared_parameter_name(
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_prepared_parameter_data_type(
-    prepared_raw: *const CassPrepared,
+    prepared_raw: CassSharedPtr<CassPrepared>,
     index: size_t,
-) -> *const CassDataType {
-    let prepared = ArcFFI::as_ref(prepared_raw);
+) -> CassSharedPtr<CassDataType> {
+    let prepared = ArcFFI::as_ref(&prepared_raw).unwrap();
 
     match prepared.variable_col_data_types.get(index as usize) {
         Some(dt) => ArcFFI::as_ptr(dt),
-        None => std::ptr::null(),
+        None => ArcFFI::null(),
     }
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_prepared_parameter_data_type_by_name(
-    prepared_raw: *const CassPrepared,
+    prepared_raw: CassSharedPtr<CassPrepared>,
     name: *const c_char,
-) -> *const CassDataType {
+) -> CassSharedPtr<CassDataType> {
     cass_prepared_parameter_data_type_by_name_n(prepared_raw, name, strlen(name))
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_prepared_parameter_data_type_by_name_n(
-    prepared_raw: *const CassPrepared,
+    prepared_raw: CassSharedPtr<CassPrepared>,
     name: *const c_char,
     name_length: size_t,
-) -> *const CassDataType {
-    let prepared = ArcFFI::as_ref(prepared_raw);
+) -> CassSharedPtr<CassDataType> {
+    let prepared = ArcFFI::as_ref(&prepared_raw).unwrap();
     let parameter_name =
         ptr_to_cstr_n(name, name_length).expect("Prepared parameter name is not UTF-8");
 
     let data_type = prepared.get_variable_data_type_by_name(parameter_name);
     match data_type {
         Some(dt) => ArcFFI::as_ptr(dt),
-        None => std::ptr::null(),
+        None => ArcFFI::null(),
     }
 }

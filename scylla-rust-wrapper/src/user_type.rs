@@ -14,7 +14,9 @@ pub struct CassUserType {
     pub field_values: Vec<Option<CassCqlValue>>,
 }
 
-impl BoxFFI for CassUserType {}
+impl FFI for CassUserType {
+    type Ownership = OwnershipExclusive;
+}
 
 impl CassUserType {
     fn set_field_by_index(&mut self, index: usize, value: Option<CassCqlValue>) -> CassError {
@@ -83,9 +85,9 @@ impl From<&CassUserType> for CassCqlValue {
 
 #[no_mangle]
 pub unsafe extern "C" fn cass_user_type_new_from_data_type(
-    data_type_raw: *const CassDataType,
-) -> *mut CassUserType {
-    let data_type = ArcFFI::cloned_from_ptr(data_type_raw);
+    data_type_raw: CassSharedPtr<CassDataType>,
+) -> CassExclusiveMutPtr<CassUserType> {
+    let data_type = ArcFFI::cloned_from_ptr(data_type_raw).unwrap();
 
     match data_type.get_unchecked() {
         CassDataTypeInner::UDT(udt_data_type) => {
@@ -95,19 +97,19 @@ pub unsafe extern "C" fn cass_user_type_new_from_data_type(
                 field_values,
             }))
         }
-        _ => std::ptr::null_mut(),
+        _ => BoxFFI::null_mut(),
     }
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn cass_user_type_free(user_type: *mut CassUserType) {
+pub unsafe extern "C" fn cass_user_type_free(user_type: CassExclusiveMutPtr<CassUserType>) {
     BoxFFI::free(user_type);
 }
 #[no_mangle]
 pub unsafe extern "C" fn cass_user_type_data_type(
-    user_type: *const CassUserType,
-) -> *const CassDataType {
-    ArcFFI::as_ptr(&BoxFFI::as_ref(user_type).data_type)
+    user_type: CassExclusiveConstPtr<CassUserType>,
+) -> CassSharedPtr<CassDataType> {
+    ArcFFI::as_ptr(&BoxFFI::as_ref(&user_type).unwrap().data_type)
 }
 
 prepare_binders_macro!(@index_and_name CassUserType,

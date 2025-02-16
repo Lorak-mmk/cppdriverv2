@@ -135,7 +135,7 @@ dependencies = [
  "regex",
  "rustc-hash",
  "shlex",
- "syn 2.0.61",
+ "syn 2.0.90",
  "which",
 ]
 
@@ -236,7 +236,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "strsim",
- "syn 2.0.61",
+ "syn 2.0.90",
 ]
 
 [[package]]
@@ -247,7 +247,7 @@ checksum = "d336a2a514f6ccccaa3e09b02d41d35330c07ddf03a62165fcec10bb561c7806"
 dependencies = [
  "darling_core",
  "quote",
- "syn 2.0.61",
+ "syn 2.0.90",
 ]
 
 [[package]]
@@ -863,7 +863,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ceca8aaf45b5c46ec7ed39fff75f57290368c1846d33d24a122ca81416ab058"
 dependencies = [
  "proc-macro2",
- "syn 2.0.61",
+ "syn 2.0.90",
 ]
 
 [[package]]
@@ -872,15 +872,15 @@ version = "1.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e17d47ce914bf4de440332250b0edd23ce48c005f59fab39d3335866b114f11a"
 dependencies = [
- "thiserror",
+ "thiserror 1.0.40",
  "toml",
 ]
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.82"
+version = "1.0.92"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8ad3d49ab951a01fbaafe34f2ec74122942fe18a3f9814c3268f1bb72042131b"
+checksum = "37d3544b3f2748c54e147655edb5025752e2303145b5aefb3c3ea2c78b973bb0"
 dependencies = [
  "unicode-ident",
 ]
@@ -1028,7 +1028,7 @@ checksum = "d29ab0c6d3fc0ee92fe66e2d99f700eab17a8d57d1c1d3b748380fb20baa78cd"
 [[package]]
 name = "scylla"
 version = "0.15.0"
-source = "git+https://github.com/scylladb/scylla-rust-driver.git?rev=v0.15.0#f59908c54e6b6407112311a3745e32d4bd218d0c"
+source = "git+https://github.com/scylladb/scylla-rust-driver.git?rev=847e44d6#847e44d61e65eccb6205bd586ccaa808e57a6c19"
 dependencies = [
  "arc-swap",
  "async-trait",
@@ -1050,7 +1050,7 @@ dependencies = [
  "smallvec",
  "snap",
  "socket2",
- "thiserror",
+ "thiserror 2.0.7",
  "tokio",
  "tokio-openssl",
  "tracing",
@@ -1076,7 +1076,7 @@ dependencies = [
  "rusty-fork",
  "scylla",
  "scylla-proxy",
- "thiserror",
+ "thiserror 2.0.7",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -1086,7 +1086,7 @@ dependencies = [
 [[package]]
 name = "scylla-cql"
 version = "0.4.0"
-source = "git+https://github.com/scylladb/scylla-rust-driver.git?rev=v0.15.0#f59908c54e6b6407112311a3745e32d4bd218d0c"
+source = "git+https://github.com/scylladb/scylla-rust-driver.git?rev=847e44d6#847e44d61e65eccb6205bd586ccaa808e57a6c19"
 dependencies = [
  "async-trait",
  "byteorder",
@@ -1095,7 +1095,7 @@ dependencies = [
  "scylla-macros",
  "snap",
  "stable_deref_trait",
- "thiserror",
+ "thiserror 2.0.7",
  "tokio",
  "uuid",
  "yoke",
@@ -1104,18 +1104,18 @@ dependencies = [
 [[package]]
 name = "scylla-macros"
 version = "0.7.0"
-source = "git+https://github.com/scylladb/scylla-rust-driver.git?rev=v0.15.0#f59908c54e6b6407112311a3745e32d4bd218d0c"
+source = "git+https://github.com/scylladb/scylla-rust-driver.git?rev=847e44d6#847e44d61e65eccb6205bd586ccaa808e57a6c19"
 dependencies = [
  "darling",
  "proc-macro2",
  "quote",
- "syn 2.0.61",
+ "syn 2.0.90",
 ]
 
 [[package]]
 name = "scylla-proxy"
 version = "0.0.3"
-source = "git+https://github.com/scylladb/scylla-rust-driver.git?rev=v0.15.0#f59908c54e6b6407112311a3745e32d4bd218d0c"
+source = "git+https://github.com/scylladb/scylla-rust-driver.git?rev=847e44d6#847e44d61e65eccb6205bd586ccaa808e57a6c19"
 dependencies = [
  "bigdecimal",
  "byteorder",
@@ -1125,7 +1125,7 @@ dependencies = [
  "num-bigint 0.3.3",
  "rand",
  "scylla-cql",
- "thiserror",
+ "thiserror 2.0.7",
  "tokio",
  "tracing",
  "uuid",
@@ -1223,9 +1223,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "2.0.61"
+version = "2.0.90"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c993ed8ccba56ae856363b1845da7266a7cb78e1d146c8a32d54b45a8b831fc9"
+checksum = "919d3b74a5dd0ccd15aeb8f93e7006bd9e14c295087c9896a110f490752bcf31"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1240,7 +1240,7 @@ checksum = "c8af7666ab7b6390ab78131fb5b0fce11d6b7a6951602017c35fa82800708971"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.61",
+ "syn 2.0.90",
 ]
 
 [[package]]
@@ -1262,7 +1262,16 @@ version = "1.0.40"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "978c9a314bd8dc99be594bc3c175faaa9794be04a5a5e153caba6915336cebac"
 dependencies = [
- "thiserror-impl",
+ "thiserror-impl 1.0.40",
+]
+
+[[package]]
+name = "thiserror"
+version = "2.0.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "93605438cbd668185516ab499d589afb7ee1859ea3d5fc8f6b0755e1c7443767"
+dependencies = [
+ "thiserror-impl 2.0.7",
 ]
 
 [[package]]
@@ -1273,7 +1282,18 @@ checksum = "f9456a42c5b0d803c8cd86e73dd7cc9edd429499f37a3550d286d5e86720569f"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.61",
+ "syn 2.0.90",
+]
+
+[[package]]
+name = "thiserror-impl"
+version = "2.0.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e1d8749b4531af2117677a5fcd12b1348a3fe2b81e36e61ffeac5c4aa3273e36"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.90",
 ]
 
 [[package]]
@@ -1312,7 +1332,7 @@ checksum = "5b8a1e28f2deaa14e508979454cb3a223b10b938b45af148bc0986de36f1923b"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.61",
+ "syn 2.0.90",
 ]
 
 [[package]]
@@ -1820,7 +1840,7 @@ checksum = "28cc31741b18cb6f1d5ff12f5b7523e3d6eb0852bbbad19d73905511d9849b95"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.61",
+ "syn 2.0.90",
  "synstructure",
 ]
 
@@ -1841,7 +1861,7 @@ checksum = "15e934569e47891f7d9411f1a451d947a60e000ab3bd24fbb970f000387d1b3b"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.61",
+ "syn 2.0.90",
 ]
 
 [[package]]
@@ -1861,6 +1881,6 @@ checksum = "0ea7b4a3637ea8669cedf0f1fd5c286a17f3de97b8dd5a70a6c167a1730e63a5"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.61",
+ "syn 2.0.90",
  "synstructure",
 ]

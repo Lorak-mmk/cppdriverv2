@@ -21,6 +21,12 @@ macro(create_copy source_file dest_name)
   add_custom_target(${dest_name}_copy ALL DEPENDS ${CMAKE_BINARY_DIR}/${dest_name})
 endmacro()
 
+if(DEFINED CMAKE_Rust_FLAGS)
+  set(CMAKE_Rust_FLAGS "${CMAKE_Rust_FLAGS} --cfg cpp_rust_unstable")
+else()
+  set(CMAKE_Rust_FLAGS "--cfg cpp_rust_unstable")
+endif()
+
 if(APPLE)
   set(INSTALL_NAME_SHARED "libscylla-cpp-driver.${PROJECT_VERSION_STRING}.dylib")
   set(INSTALL_NAME_SHARED_SYMLINK_VERSION "libscylla-cpp-driver.${PROJECT_VERSION_MAJOR}.dylib")
